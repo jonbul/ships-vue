@@ -4,8 +4,7 @@ const username = 'Guest'
 </script>
 
 <template>
-  <NavBar />
-  <RouterView />
+  <h1>Hello {{ username }}</h1>
 </template>
 
 <style scoped></style>

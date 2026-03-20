@@ -11,12 +11,13 @@ const isMenuOpen = ref(false)
             data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             &#9776;
         </button>
-        <ul :class="{ 'collapsed-expanded': isMenuOpen }" class="navbarMenu collapsable" id="navbarMenu">
+        <ul @click="isMenuOpen = !isMenuOpen" :class="{ 'collapsed-expanded': isMenuOpen }"
+            class="navbarMenu collapsable" id="navbarMenu">
             <li class="nav-item">
-                <a class="nav-link" href="/">Home<!--span class="sr-only"> (current)</span--></a>
+                <RouterLink class="nav-link" to="/">Home<!--span class="sr-only"> (current)</span--></RouterLink>
             </li>
             <li class="nav-item">
-                <a class="nav-link" href="/game">Game</a>
+                <RouterLink class="nav-link" to="/game">Game</RouterLink>
             </li>
             <!--% if (username) { %-->
             <li class="nav-item">

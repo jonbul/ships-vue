@@ -5,18 +5,25 @@ import {
     Line,
     Rect,
     Text
-} from './canvasClasses.js';
+} from '../canvas/canvasClasses.js';
 import {
     Bullet,
     RadarArrow,
     ChargingBar,
     Player
 } from './gameClasses.js';
-import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW } from '/constants.js';
-import { asyncRequest, showAlert } from '../functions.js';
+
+
+/*const apiHost = (window.location.host.substring(0, window.location.host.indexOf(':')) || window.location.host) + ':3000';
+const contantsUrl = apiHost + '/constants.js';
+const { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW } = await import(contantsUrl);
+*/
+import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW } from '/js/utils/constants.js';
+import { asyncRequest, showAlert } from '/js/utils/functions.js';
 import { Animation, getExplossionFrames } from './animationClass.js';
 import gameSounds from './gameSounds.js';
 import MessagesManager from './messagesManagerClass.js';
+import io from 'https://cdn.socket.io/4.8.1/socket.io.esm.min.js';
 
 class Game {
     constructor(canvas, username, credits, isSmartphone, ship, shipsManager) {
@@ -36,7 +43,7 @@ class Game {
         window.game = this;
         this.username = username
 
-        this.io = window.io(({
+        this.io = io(({
             reconnection: true,
             reconnectionDelay: 1000,
             reconnectionDelayMax: 5000,

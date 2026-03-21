@@ -1,5 +1,7 @@
 import { Text } from './canvasClasses.js';
-import { KILLWORDS } from '/constants.js';
+const apiHost = (window.location.host.substring(0, window.location.host.indexOf(':')) || window.location.host) + ':3000';
+const contantsUrl = apiHost + '/constants.js';
+import { KILLWORDS } from '/js/utils/constants.js';
 
 export default class MessagesManager {
     constructor(game) {
@@ -35,7 +37,7 @@ export default class MessagesManager {
             if (Date.now() > msg.exp) {
                 msg.opacity -= 0.01;
             }
-            if(msg.opacity > 0 && i < 6) {
+            if (msg.opacity > 0 && i < 6) {
                 text.color = this.getColor(msg.opacity);
                 text.text = msg.text;
                 text.y = y + this.lineHeight * i;

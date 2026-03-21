@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import "../public/css/layout.css"
 const isMenuOpen = ref(false)
 </script>
 
 <template>
-    <link rel="stylesheet" href="/css/layout.css">
     <nav id="mainNavbar">
         <a class="mainNavbar-brand" href="#">JAES</a>
         <button @click="isMenuOpen = !isMenuOpen" class="navbar-button" type="button" data-toggle="collapse"

@@ -1,12 +1,22 @@
 "use strict";
-import CanvasClasses from './canvas/canvasClasses.js';
-import CONST from '/constants.js';
-import { ALERT_TYPES } from '/constants.js';
-function asyncRequest({ url, method, data }) {
-    return fetch(url, {
+import CanvasClasses from '../canvas/canvasClasses.js';
+import CONST from '/js/utils/constants.js';
+const ALERT_TYPES = CONST.ALERT_TYPES;
+
+const host = window.location.host.substring(0, window.location.host.indexOf(':')) || window.location.host;
+const protocol = "https:";
+const baseUrl = `${protocol}//${host}:3000`;
+
+function asyncRequest({ path, method, data }) {
+    if (path.indexOf('/') !== 0) {
+        path = '/' + path;
+    }
+    return fetch(baseUrl + path, {
+        credentials: 'include',
         method: method || 'GET',
         headers: {
-            'Content-Type': 'application/json;charset=UTF-8'
+            'Content-Type': 'application/json;charset=UTF-8',
+            'Access-Control-Allow-Origin': '*'
         },
         body: data && typeof data === "object" ? JSON.stringify(data) : data
     }).then(response => {
@@ -35,7 +45,7 @@ function asyncRequest({ url, method, data }) {
         if (method && method.toUpperCase() !== 'GET') {
             showAlert({ type: ALERT_TYPES.SUCCESS, msg: 'Operation successful', title: 'Success' });
         }
-        return response.json().catch(() => response.text());
+        return response.json().catch(e => response.text());
     });
 }
 

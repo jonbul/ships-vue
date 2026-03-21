@@ -1,5 +1,5 @@
-import { asyncRequest, showAlert, parseLayers } from '../functions.js';
-import CONST from '/constants.js';
+import { asyncRequest, showAlert, parseLayers } from '/js/utils/functions.js';
+import CONST from 'js/utils/constants';
 import windowsEvents from './windows.js';
 import {
     Abstract,

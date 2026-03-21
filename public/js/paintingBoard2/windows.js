@@ -1,4 +1,6 @@
-import CONST from '/constants.js';
+const apiHost = (window.location.host.substring(0, window.location.host.indexOf(':')) || window.location.host) + ':3000';
+const contantsUrl = apiHost + '/constants.js';
+import CONST from '/js/utils/constants.js';
 
 let eventsLoaded = false;
 let bool_movingWin = false;

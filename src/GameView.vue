@@ -1,10 +1,35 @@
 <script setup lang="ts">
-
-const username = 'Guest'
+import '../public/css/game.css'
+import { onMounted } from 'vue';
+onMounted(() => {
+  const scripts = ["/js/canvas/gamePreload.js",]
+  for (const scriptSrc of scripts) {
+    const script = document.createElement('script');
+    script.src = scriptSrc;
+    script.type = 'module';
+    document.body.appendChild(script);
+  }
+});
 </script>
 
 <template>
+  <div class="container">
+    <div id="shipSelector" class="container">
+      <div id="shipSelectorControl">
+        <button id="previousShip" style="transform: scaleX(-1);">&#x27A4;</button>
+        <button style="display: inline-block" id="startBtn">START</button>
+        <button id="nextShip">&#x27A4;</button>
+      </div>
+      <div id="shipsBlock">
 
+      </div>
+    </div>
+    <canvas class="mt-2" style="display: none;" id="canvas" width="" height=""></canvas>
+    <div>Volume</div>
+    <label for="audioVolume"></label>
+    <input type="range" min="0" max="100" id="audioVolume" />
+  </div>
+  <!--script src="/socket.io/socket.io.js"></script-->
 </template>
 
 <style scoped></style>

@@ -1,6 +1,6 @@
-import CONST from '/constants.js';
+import CONST from 'js/utils/constants';
 import { Layer, Rect, ProjectShape } from '../canvas/canvasClasses.js';
-import { parseShape, parseLayer, showAlert, parseLayers } from '../functions.js';
+import { parseShape, parseLayer, showAlert, parseLayers } from '/js/utils/functions.js';
 
 class LayerManager {
     constructor(paintingBoard) {

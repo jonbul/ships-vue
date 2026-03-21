@@ -1,4 +1,4 @@
-import CONST from '/constants.js';
+import CONST from '/js/utils/constants.js';
 class MasterJasonFile {
     constructor(cnvW, cnvH, bgc, gridH, gridV, layers) {
         this.canvas = function (cnvW, cnvH) {
@@ -809,11 +809,11 @@ class Text {
         this.name = name || this.desc;
         this.rotation = rotation;
 
-        this.align ={
+        this.align = {
             START: "start",
             END: "end",
-            LEFT:"left",
-            RIGHT:"right",
+            LEFT: "left",
+            RIGHT: "right",
             CENTER: "center",
         }
     }

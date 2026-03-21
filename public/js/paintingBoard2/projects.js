@@ -1,8 +1,8 @@
-import { asyncRequest, parseLayers } from '/js/functions.js';
+import { asyncRequest, parseLayers } from '/js/utils/functions.js';
 
 const projectBoard = document.getElementById('projectBoard');
 
-const projects = await asyncRequest({ url: '../paintingBoard2/projects/all', method: 'GET' });
+const projects = await asyncRequest({ url: '/paintingBoard2/projects/all', method: 'GET' });
 
 if (projects) {
 

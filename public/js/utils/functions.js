@@ -15,8 +15,7 @@ function asyncRequest({ path, method, data }) {
         credentials: 'include',
         method: method || 'GET',
         headers: {
-            'Content-Type': 'application/json;charset=UTF-8',
-            'Access-Control-Allow-Origin': '*'
+            'Content-Type': 'application/json;charset=UTF-8'
         },
         body: data && typeof data === "object" ? JSON.stringify(data) : data
     }).then(response => {

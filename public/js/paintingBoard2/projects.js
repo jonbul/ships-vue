@@ -2,7 +2,7 @@ import { asyncRequest, parseLayers } from '/js/utils/functions.js';
 
 const projectBoard = document.getElementById('projectBoard');
 
-const projects = await asyncRequest({ url: '/paintingBoard2/projects/all', method: 'GET' });
+const projects = await asyncRequest({ path: '/paintingBoard2/projects/all', method: 'GET' });
 
 if (projects) {
 
@@ -31,7 +31,7 @@ if (projects) {
         }
 
         card.appendChild(canvas);
-        
+
         const title = document.createElement('h5');
         const link = document.createElement('a');
         link.href = `/paintingBoard2?id=${project._id}`;

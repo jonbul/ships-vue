@@ -25,7 +25,7 @@ class GameStatus {
     }
     drawMapInterval() {
         const func = async () => {
-            const data = (await asyncRequest({ url: '/gameData', method: 'POST', data: this.backgroundCardsSorted }));
+            const data = (await asyncRequest({ path: '/gameData', method: 'POST', data: this.backgroundCardsSorted }));
             if (!data) return;
             this.players = data.players;
             this.writePlayersTable(data.players);
@@ -44,7 +44,7 @@ class GameStatus {
         for (const plId in players) {
             const player = players[plId];
             const tr = document.createElement('tr');
-            props.forEach( prop => {
+            props.forEach(prop => {
                 const td = document.createElement('td');
                 td.style.textAlign = 'center';
                 td.innerHTML = player[prop];

@@ -23,7 +23,12 @@ import { asyncRequest, showAlert } from '/js/utils/functions.js';
 import { Animation, getExplossionFrames } from './animationClass.js';
 import gameSounds from './gameSounds.js';
 import MessagesManager from './messagesManagerClass.js';
-import io from 'https://cdn.socket.io/4.8.1/socket.io.esm.min.js';
+
+
+const backendHost = (window.location.host.substring(0, window.location.host.indexOf(':')) || window.location.host) + ':3000';
+const backendApiHost = "https://" + backendHost;
+const websocketHost = "wss://" + backendHost;
+const io = (await import(backendApiHost + "/socket.io/socket.io.esm.min.js")).io;
 
 class Game {
     constructor(canvas, username, credits, isSmartphone, ship, shipsManager) {
@@ -43,21 +48,21 @@ class Game {
         window.game = this;
         this.username = username
 
-        this.io = io(({
+        this.io = io(websocketHost, {
             reconnection: true,
             reconnectionDelay: 1000,
             reconnectionDelayMax: 5000,
             reconnectionAttempts: 5,
             timeout: 20000,
             transports: ['websocket', 'polling'] // Fallback a polling si WebSocket falla
-        }));
+        });
         this.loadEvents();
 
         this.createStaticCanvas();
 
         // Wait for connection
         this.io.once('connect', async () => {
-            const tempPlayers = (await asyncRequest({ url: '/game/getPlayers', method: 'GET' })).response;
+            const tempPlayers = (await asyncRequest({ path: '/game/getPlayers', method: 'GET' })).response;
             for (const id in tempPlayers) {
                 this.updatePlayers(tempPlayers[id]);
             }

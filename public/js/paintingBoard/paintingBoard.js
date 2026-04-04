@@ -74,7 +74,7 @@ class PaintingBoard {
         (async () => {
             const id = requestParams.get('id');
             if (id) {
-                project = await asyncRequest({ path: `/paintingBoard2/projects/id?id=${id}` })
+                project = await asyncRequest({ path: `/paintingBoard/projects/id?id=${id}` })
             }
             //this.projects = {};
             //projects.forEach(p => this.projects[p._id] = this.parseProject(p));
@@ -355,7 +355,7 @@ class PaintingBoard {
     toolProjectShapeClickEvent() {
         const projectShapeWindow = document.getElementById('projectShapeWindow');
 
-        asyncRequest({ path: '/paintingBoard2/projects/all' }).then(projects => {
+        asyncRequest({ path: '/paintingBoard/projects/all' }).then(projects => {
             const selectShapeToProject = document.getElementById('selectShapeToProject');
             selectShapeToProject.innerHTML = '';
             projects.forEach(project => {
@@ -849,7 +849,7 @@ class PaintingBoard {
             height: this.menus.resolution.height.value
         };
         const response = await asyncRequest({
-            path: '/paintingBoard2/save',
+            path: '/paintingBoard/save',
             method: 'POST',
             data: {
                 id: this.project._id,

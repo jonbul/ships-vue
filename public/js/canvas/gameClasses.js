@@ -10,18 +10,17 @@ import { parseLayers } from '/js/utils/functions.js';
 
 window.forms = Forms;
 class Player {
-    constructor(shipsManager, username, shipId, x = 0, y = 0, credits) {
-        this.shipsManager = shipsManager;
+    constructor(ship, username, shipId, x = 0, y = 0, credits) {
         this.name = username;
         this.shipId = shipId;
-        this.ship = shipsManager.getShipById(shipId);
+        this.ship = ship;
         this.credits = credits || 0;
         this.layers = parseLayers(this.ship.layers);
         this.x = x;
         this.y = y;
         this.nameShape = new Text(this.name, this.x, this.y - 10, 30, 'Helvetica', '#ffffff');
-        this.width = this.ship.width;
-        this.height = this.ship.height;
+        this.width = this.ship.width || this.ship.canvas.width;
+        this.height = this.ship.height || this.ship.canvas.height;
         this.rotate = 0;
         this.bullets = [];
         this.life = 10;
@@ -122,8 +121,8 @@ class Player {
             this.pictureCanvas = document.createElement('canvas');
         }
         const realDimension = this.getRealDimension();
-         const roundedWidth = Math.ceil(realDimension.width);
-         const roundedHeight = Math.ceil(realDimension.height);
+        const roundedWidth = Math.ceil(realDimension.width);
+        const roundedHeight = Math.ceil(realDimension.height);
         this.pictureCanvas.width = roundedWidth;
         this.pictureCanvas.height = roundedHeight;
         // reset canvas
@@ -161,10 +160,10 @@ class Player {
      */
     getRealDimension() {
         return {
-            x: this.x + this.xTranslation,
-            y: this.y + this.yTranslation,
-            width: this.realWidth,
-            height: this.realHeight
+            x: this.x + (this.xTranslation || 0),
+            y: this.y + (this.yTranslation || 0),
+            width: this.realWidth || this.width,
+            height: this.realHeight || this.height
         }
     }
     /**

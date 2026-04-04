@@ -42,7 +42,7 @@ function asyncRequest({ path, method, data }) {
             });
         }
         if (method && method.toUpperCase() !== 'GET') {
-            showAlert({ type: ALERT_TYPES.SUCCESS, msg: 'Operation successful', title: 'Success' });
+            //showAlert({ type: ALERT_TYPES.SUCCESS, msg: 'Operation successful', title: 'Success' });
         }
         return response.json().catch(e => response.text());
     });

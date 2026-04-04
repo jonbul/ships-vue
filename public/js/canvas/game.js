@@ -62,7 +62,7 @@ class Game {
 
         // Wait for connection
         this.io.once('connect', async () => {
-            const tempPlayers = (await asyncRequest({ path: '/game/getPlayers', method: 'GET' })).response;
+            const tempPlayers = await asyncRequest({ path: '/game/getPlayers', method: 'GET' });
             for (const id in tempPlayers) {
                 this.updatePlayers(tempPlayers[id]);
             }
@@ -73,7 +73,7 @@ class Game {
                 ship = baseShips[index]
             }
 
-            this.player = new Player(shipsManager, this.username, ship._id, 0, 0, credits);
+            this.player = new Player(shipsManager.getShipById(ship._id), this.username, ship._id, 0, 0, credits);
             this.chargingBar = new ChargingBar(this.player, this.context);
             this.player.socketId = this.io.id;
             this.players[this.player.socketId] = this.player;
@@ -191,7 +191,7 @@ class Game {
         });
     }
     beginInterval() {
-        const timestep = 1000 / 60; // 60 updates per second (fixed timestep)
+        const timestep = 1000 / 30; // 30 updates per second (fixed timestep)
         let lastTime = null;
         let accumulator = 0;
         const loop = (timestamp) => {
@@ -476,7 +476,7 @@ class Game {
         const players = this.players;
         if (plDetails) {
             if (!players[plDetails.socketId]) {
-                players[plDetails.socketId] = new Player(this.shipsManager, plDetails.name, plDetails.shipId);
+                players[plDetails.socketId] = new Player(this.shipsManager.getShipById(plDetails.shipId), plDetails.name, plDetails.shipId);
                 players[plDetails.socketId].socketId = plDetails.socketId;
             }
             players[plDetails.socketId].x = plDetails.x;

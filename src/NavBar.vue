@@ -21,7 +21,7 @@ const isMenuOpen = ref(false)
             </li>
             <!--% if (username) { %-->
             <li class="nav-item">
-                <a class="nav-link" href="/paintingBoard2/projects">Painting Projects</a>
+                <a class="nav-link" href="/paintingBoard/projects">Painting Projects</a>
             </li>
             <!--% if (isAdmin) { %-->
             <li class="nav-item">

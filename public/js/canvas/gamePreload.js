@@ -27,12 +27,9 @@ const canvas = document.getElementById('canvas');
 canvas.width = gameData.canvasWidth
 canvas.height = gameData.canvasHeight
 
-//let userShips = (await (await fetch("./game/userShips")).json()).userShips;
+let userShips = (await asyncRequest({ path: "./game/userShips" })).userShips;
 
-//const res = await (await fetch('/game/getShips')).json()
-let userShips = await asyncRequest({ path: '/game/userShips' });
 const res = await asyncRequest({ path: '/game/getShips' });
-
 const shipsManager = new ShipsManager(res);
 
 if (!userShips.length) {
@@ -111,7 +108,7 @@ async function btnStart(e) {
                 }
                 launch();
             } else {
-                alert('Se necesita permiso para los sensores de movimiento');
+                alert('Permission not granted to access device orientation');
             }
 
         } else {

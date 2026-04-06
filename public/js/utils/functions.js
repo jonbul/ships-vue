@@ -15,7 +15,8 @@ function asyncRequest({ path, method, data }) {
         credentials: 'include',
         method: method || 'GET',
         headers: {
-            'Content-Type': 'application/json;charset=UTF-8'
+            'Content-Type': 'application/json;charset=UTF-8',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: data && typeof data === "object" ? JSON.stringify(data) : data
     }).then(response => {
@@ -26,6 +27,8 @@ function asyncRequest({ path, method, data }) {
                     err = 'Bad Request';
                 } else if (response.status === 401) {
                     err = 'Unauthorized';
+                    cookieStore.delete('token');
+                    localStorage.removeItem('token');
                 } else if (response.status === 403) {
                     err = 'Forbidden';
                 } else if (response.status === 404) {
@@ -35,16 +38,21 @@ function asyncRequest({ path, method, data }) {
                 }
                 err += `(${response.status})`;
                 showAlert({ type: ALERT_TYPES.DANGER, msg: err, title: 'Error' });
+                let errors = null;
                 try {
-                    err += ": " + JSON.parse(text);
+                    const parsedText = JSON.parse(text);
+                    err += ": " + parsedText.errors;
+                    if (parsedText) {
+                        errors = parsedText.errors;
+                    }
                 } catch { if (text) err += `: ${text}`; }
-                return Promise.reject(err);
+                return Promise.reject({ status: response.status, response: err, text, errors });
             });
         }
         if (method && method.toUpperCase() !== 'GET') {
             //showAlert({ type: ALERT_TYPES.SUCCESS, msg: 'Operation successful', title: 'Success' });
         }
-        return response.json().catch(e => response.text());
+        return response.json().catch(() => response.text());
     });
 }
 

@@ -23,12 +23,13 @@ import { asyncRequest, showAlert } from '/js/utils/functions.js';
 import { Animation, getExplossionFrames } from './animationClass.js';
 import gameSounds from './gameSounds.js';
 import MessagesManager from './messagesManagerClass.js';
+import { io } from 'https://cdn.socket.io/4.8.3/socket.io.esm.min.js';
 
 
 const backendHost = (window.location.host.substring(0, window.location.host.indexOf(':')) || window.location.host) + ':3000';
 const backendApiHost = "https://" + backendHost;
 const websocketHost = "wss://" + backendHost;
-const io = (await import(backendApiHost + "/socket.io/socket.io.esm.min.js")).io;
+//const io = (await import(backendApiHost + "/socket.io/socket.io.esm.min.js")).io;
 
 class Game {
     constructor(canvas, username, credits, isSmartphone, ship, shipsManager) {
@@ -62,7 +63,7 @@ class Game {
 
         // Wait for connection
         this.io.once('connect', async () => {
-            const tempPlayers = await asyncRequest({ path: '/game/getPlayers', method: 'GET' });
+            const tempPlayers = (await asyncRequest({ path: '/game/getPlayers', method: 'GET' }));
             for (const id in tempPlayers) {
                 this.updatePlayers(tempPlayers[id]);
             }
@@ -990,8 +991,8 @@ class Game {
         return this.checkRectsCollision(rect, {
             x: arc.x - (arc.radiusX || arc.radius),
             y: arc.y - (arc.radiusY || arc.radius),
-            width: arc.radiusX * 2,
-            height: arc.radiusY * 2
+            width: (arc.radiusX || arc.radius) * 2,
+            height: (arc.radiusY || arc.radius) * 2
         });
     }
 }

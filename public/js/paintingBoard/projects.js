@@ -50,7 +50,8 @@ if (projects) {
         projectBoard.appendChild(card);
     }
     function deleteProject(id, card) {
-        fetch(`../paintingBoard/projects?id=${id}`, {
+        asyncRequest({
+            path: `../paintingBoard/projects?id=${id}`,
             method: 'DELETE'
         }).then(response => response.json())
             .then(data => {

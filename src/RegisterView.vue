@@ -18,25 +18,22 @@ onMounted(() => {
 
       <div class="form-group">
         <label for="username" class="">User Name</label>
-        <input type="text" id="username" class="form-control" placeholder="User Name" required="" autofocus=""
-          name="username">
+        <input type="text" id="username" class="form-control" placeholder="User Name" autofocus name="username">
       </div>
 
       <div class="form-group">
         <label for="inputEmail" class="">Email address</label>
-        <input type="email" id="inputEmail" class="form-control" placeholder="Email address" required="" autofocus=""
-          name="email">
+        <input type="email" id="inputEmail" class="form-control" placeholder="Email address" name="email">
       </div>
 
       <div class="form-group">
         <label for="inputPassword" class="">Password</label>
-        <input type="password" id="inputPassword" class="form-control" placeholder="Password" required=""
-          name="password">
+        <input type="password" id="inputPassword" class="form-control" placeholder="Password" name="password">
       </div>
 
       <div class="form-group">
         <label for="inputRepeatPassword" class="">Repeat Password</label>
-        <input type="password" id="inputRepeatPassword" class="form-control" placeholder="Repeat Password" required=""
+        <input type="password" id="inputRepeatPassword" class="form-control" placeholder="Repeat Password"
           name="cpassword">
       </div>
 

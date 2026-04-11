@@ -275,7 +275,7 @@ body {
                 display: inline-block;
             }
 
-            .navbarMenu.collapsable.collapsed-expanded {
+            .navbarMenu.collapsable[collapsed-expanded] {
                 display: block !important;
                 position: absolute;
                 background-color: #343a40;

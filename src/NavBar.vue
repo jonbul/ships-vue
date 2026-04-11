@@ -55,7 +55,7 @@ onMounted(() => {
                 </a>
             </li>
             <li class="nav-item logged">
-                <a href="/logout" class="nav-link">Logout</a>
+                <a class="nav-link" id="logoutLink">Logout</a>
             </li>
         </ul>
     </nav>

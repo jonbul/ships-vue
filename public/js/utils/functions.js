@@ -7,7 +7,7 @@ const host = window.location.host.substring(0, window.location.host.indexOf(':')
 const protocol = "https:";
 const baseUrl = `${protocol}//${host}:3000`;
 
-async function asyncRequest({ path, method, data }) {
+async function asyncRequest({ path, method, data, silent = false }) {
     const token = await cookieStore.get('token');
     if (path.indexOf('/') !== 0) {
         path = '/' + path;
@@ -29,6 +29,7 @@ async function asyncRequest({ path, method, data }) {
                 } else if (response.status === 401) {
                     err = 'Unauthorized';
                     cookieStore.delete('token');
+                    localStorage.removeItem('user');
                 } else if (response.status === 403) {
                     err = 'Forbidden';
                 } else if (response.status === 404) {
@@ -37,7 +38,7 @@ async function asyncRequest({ path, method, data }) {
                     err = 'Internal Server Error';
                 }
                 err += `(${response.status})`;
-                showAlert({ type: ALERT_TYPES.DANGER, msg: err, title: 'Error' });
+                if (!silent) showAlert({ type: ALERT_TYPES.DANGER, msg: err, title: 'Error' });
                 let errors = null;
                 try {
                     const parsedText = JSON.parse(text);
@@ -46,7 +47,8 @@ async function asyncRequest({ path, method, data }) {
                         errors = parsedText.errors;
                     }
                 } catch { if (text) err += `: ${text}`; }
-                return Promise.reject({ status: response.status, response: err, text, errors });
+                console.error({ status: response.status, response: err, text, errors });
+                return null;
             });
         }
         if (method && method.toUpperCase() !== 'GET') {

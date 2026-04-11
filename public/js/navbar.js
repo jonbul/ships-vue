@@ -7,24 +7,21 @@ button.addEventListener('click', function () {
 });
 
 // User session handling
-const ckToken = (await cookieStore.get('token'))?.value;
 let user = undefined;
-if (ckToken) {
 
-    let lsUser = localStorage.getItem('user');
-    if (!lsUser) {
-        user = await asyncRequest({ path: '/userInfo', method: 'GET' });
-        if (user) {
-            localStorage.setItem('user', JSON.stringify(user));
-        }
-    } else {
-        user = JSON.parse(lsUser);
+let lsUser = localStorage.getItem('user');
+if (!lsUser) {
+    user = await asyncRequest({ path: '/userInfo', method: 'GET', silent: true });
+    if (user) {
+        localStorage.setItem('user', JSON.stringify(user));
     }
-    let username = user?.username;
-    const usernameElement = document.getElementById('username');
-    if (username && usernameElement) {
-        usernameElement.textContent = ` ${username}`;
-    }
+} else {
+    user = JSON.parse(lsUser);
+}
+let username = user?.username;
+const usernameElement = document.getElementById('username');
+if (username && usernameElement) {
+    usernameElement.textContent = ` ${username}`;
 }
 
 document.getElementById('mainNavbar').querySelectorAll(".navbarMenu>.nav-item").forEach(item => {
@@ -44,3 +41,19 @@ document.getElementById('mainNavbar').querySelectorAll(".navbarMenu>.nav-item").
         }
     }
 });
+
+// Logout handling
+const logoutButton = document.getElementById('logoutLink');
+if (logoutButton) {
+    logoutButton.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+            await asyncRequest({ path: '/logout', method: 'POST' });
+        } catch (err) {
+            console.error('Logout error:', err);
+        }
+        localStorage.removeItem('user');
+        cookieStore.delete('token');
+        window.location.href = '/';
+    });
+}

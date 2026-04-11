@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import NavBar from './NavBar.vue'
-const username = 'Guest'
 </script>
 
 <template>
-  <h1>Hello {{ username }}</h1>
+  <div class="container">
+    <h1>Welcome<span id="username"></span></h1>
+  </div>
 </template>
 
 <style scoped></style>

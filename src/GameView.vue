@@ -29,7 +29,6 @@ onMounted(() => {
     <label for="audioVolume"></label>
     <input type="range" min="0" max="100" id="audioVolume" />
   </div>
-  <!--script src="/socket.io/socket.io.js"></script-->
 </template>
 
 <style scoped></style>

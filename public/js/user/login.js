@@ -1,20 +1,20 @@
-import { showAlert } from '/js/functions.js';
+import { showAlert, asyncRequest } from '/js/utils/functions.js';
 document.getElementById('btnLogin').addEventListener('click', function (event) {
     event.preventDefault(); // Prevent the default form submission
 
     const email = document.getElementById('inputEmail').value;
     const password = document.getElementById('inputPassword').value;
     const rememberMe = document.getElementById('rememberMe').checked;
+    if (!email || !password) {
+        showAlert({ type: 'warning', title: 'Warning', msg: 'Please enter both email and password' });
+        return;
+    }
 
     asyncRequest({
-        path: '/login', '/login'
+        path: '/login',
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email, password, rememberMe })
+        data: JSON.stringify({ email, password, rememberMe })
     })
-        .then(response => response.json())
         .then(data => {
             if (data.success) {
                 // Handle successful login (e.g., redirect to dashboard)

@@ -7,7 +7,8 @@ const host = window.location.host.substring(0, window.location.host.indexOf(':')
 const protocol = "https:";
 const baseUrl = `${protocol}//${host}:3000`;
 
-function asyncRequest({ path, method, data }) {
+async function asyncRequest({ path, method, data }) {
+    const token = await cookieStore.get('token');
     if (path.indexOf('/') !== 0) {
         path = '/' + path;
     }
@@ -16,7 +17,7 @@ function asyncRequest({ path, method, data }) {
         method: method || 'GET',
         headers: {
             'Content-Type': 'application/json;charset=UTF-8',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
+            'Authorization': `${token ? 'Bearer ' + token.value : ''}`
         },
         body: data && typeof data === "object" ? JSON.stringify(data) : data
     }).then(response => {
@@ -28,7 +29,6 @@ function asyncRequest({ path, method, data }) {
                 } else if (response.status === 401) {
                     err = 'Unauthorized';
                     cookieStore.delete('token');
-                    localStorage.removeItem('token');
                 } else if (response.status === 403) {
                     err = 'Forbidden';
                 } else if (response.status === 404) {
@@ -52,7 +52,7 @@ function asyncRequest({ path, method, data }) {
         if (method && method.toUpperCase() !== 'GET') {
             //showAlert({ type: ALERT_TYPES.SUCCESS, msg: 'Operation successful', title: 'Success' });
         }
-        return response.json().catch(() => response.text());
+        return response.json();
     });
 }
 

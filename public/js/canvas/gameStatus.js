@@ -7,9 +7,6 @@ import { asyncRequest } from '/js/utils/functions.js';
 class GameStatus {
     constructor(canvasWidth, canvasHeight) {
         const _this = this;
-        (async function () {
-            _this.drawMapInterval();
-        })();
         this.canvasWidth = canvasWidth;
         this.canvasHeight = canvasHeight
         this.canvas = document.getElementById('canvas');
@@ -23,14 +20,26 @@ class GameStatus {
         this.mouseEvent();
         this.playersDetails = document.getElementById('playersDetails');
         this.ships = null;
+        this.requestInProgress = false;
+
+        (async function () {
+            _this.drawMapInterval();
+        })();
     }
     drawMapInterval() {
         const func = async () => {
-            const data = (await asyncRequest({ path: '/gameData', method: 'POST', data: this.backgroundCardsSorted }));
-            if (!data) return;
-            this.players = data.players;
-            this.writePlayersTable(data.players);
-            this.drawMap(data.resultCards);
+            if (this.requestInProgress) return;
+            this.requestInProgress = true;
+            try {
+                const data = (await asyncRequest({ path: '/gameData', method: 'POST', data: this.backgroundCardsSorted }));
+                if (!data) return;
+                this.players = data.players;
+                this.writePlayersTable(data.players);
+                this.drawMap(data.resultCards);
+            } catch (error) {
+                console.error(error);
+            }
+            this.requestInProgress = false;
         };
         setInterval(func, 1000);
     }
@@ -158,4 +167,9 @@ class GameStatus {
         });
     }
 }
-export default GameStatus;
+
+(async function name(params) {
+    const gameData = await asyncRequest({ path: '/game/data', method: 'GET' });
+    new GameStatus(gameData.canvasWidth, gameData.canvasHeight);
+})()
+new GameStatus();

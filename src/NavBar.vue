@@ -49,7 +49,7 @@ onMounted(() => {
             </li>
 
             <li class="nav-item logged profile">
-                <a href="/profile" class="nav-link" alt="<%= username %>">
+                <a href="/profile" class="nav-link" alt="Profile">
                     👤
                     <span name="username"></span>
                 </a>

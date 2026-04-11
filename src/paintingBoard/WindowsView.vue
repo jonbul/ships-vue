@@ -1,0 +1,287 @@
+<script setup lang="ts">
+import '/public/css/paintingBoard/windows.css'
+</script>
+
+<template>
+  <!--TOOLS-->
+  <span class="window" id="toolsWindow" style="vertical-align: top; top: 82px; left: 0;" rowspan="2">
+    <span class="windowBar">Tools</span><br>
+    <span class="windowContent">
+      <input type="checkbox" id="followGrid" value="true" />
+      <label for="followGrid">▦</label>
+      <br>
+      <span>
+        X <input type="number" id="gridV" value="20" min="0" />
+        <br>
+        Y <input type="number" id="gridH" value="20" min="0" />
+      </span>
+      <br>
+      <div id="toolList">
+
+        <input id="toolRect" type="radio" name="action" value="Rect" checked="true">
+        <label for="toolRect" aria-label="Rectangle" title="Rectangle">&#8414;</label>
+        <br>
+
+        <input id="toolArc" type="radio" name="action" value="Arc">
+        <label for="toolArc" aria-label="Arc" title="Arc">&#8413;</label>
+        <br>
+
+        <input id="toolSemiarc" type="radio" name="action" value="Semiarc">
+        <label for="toolSemiarc" aria-label="Semiarc" title="Semiarc">&#9680;</label>
+        <br>
+
+        <input id="toolEllipse" type="radio" name="action" value="Ellipse">
+        <label for="toolEllipse" aria-label="Ellipse" title="Ellipse">&#9675;</label>
+        <br>
+
+        <input id="toolLine" type="radio" name="action" value="Line">
+        <label for="toolLine" aria-label="Line" title="Line">&#9472;</label>
+        <br>
+
+        <input id="toolPolygon" type="radio" name="action" value="Polygon">
+        <label for="toolPolygon" aria-label="Polygon" title="Polygon">&#9650;</label>
+        <br>
+
+        <input id="toolPencil" type="radio" name="action" value="Pencil">
+        <label for="toolPencil" aria-label="Pencil" title="Pencil">&#9999;</label>
+        <br>
+
+        <input id="toolAbstract" type="radio" name="action" value="Abstract">
+        <label for="toolAbstract" aria-label="Abstract" title="Abstract">§</label>
+        <br>
+
+        <input id="toolRubber" type="radio" name="action" value="Rubber">
+        <label for="toolRubber" aria-label="Rubber" title="Rubber">&#10060;</label>
+        <br>
+
+        <!--input id="toolColorPicker" type="radio" name="action" value="colorpicker">
+            <label for="toolColorPicker" aria-label="Color Picker" title="Color Picker">&#127778;</label>
+            <br-->
+
+        <input id="imageLoader" value="Load Image" />
+        <input id="imageLoaderLocal" style="display: none;" type="file" value="Load Local Image" multiple />
+        <label for="imageLoader" title="Load Local Image">&#128444;</label>
+        <br>
+      </div>
+
+      <input id="toolProjectShape" type="button" name="action" value="ProjectShape" style="display: none;" />
+      <label for="toolProjectShape" aria-label="ProjectShape" title="ProjectShape">P</label>
+      <br>
+    </span>
+  </span>
+  <!--COLOR-->
+  <span class="window" id="colorWindow" style=" top: 82px; right: 0px;">
+    <span class="windowBar">Color</span><br>
+    <span class="windowContent">
+      <table>
+        <tr>
+          <td>
+            R<input type="range" id="colorRed" min="0" max="255" value="0" /><br>
+            G<input type="range" id="colorGreen" min="0" max="255" value="0" /><br>
+            B<input type="range" id="colorBlue" min="0" max="255" value="0" /><br>
+            A<input type="range" id="colorAlpha" min="0" max="1" value="1" step="0.01" /><br>
+          </td>
+          <td id="colorResult" style="width: 20px; cursor: pointer">
+            <input type="color" id="backgroundColor" alpha />
+          </td>
+        </tr>
+      </table>
+      <input type="color" id="borderColor" />
+      <input type="Number" id="borderWidth" min="0" value="1" style="width: 50px;" />Border Width<br>
+      <input type="Button" id="btnBgColor" value="Set BackGround Color" style="width:100%;" onclick="setBgColor()" />
+    </span>
+  </span>
+  <!--LAYERS-->
+  <span class="window" id="layerWindow" style="top: 256px; right: 0;">
+    <span class="windowBar">Layers</span><br>
+    <span class="windowContent">
+      <div id="layerWindow_buttons" style="display: flex; justify-content: space-between;">
+        <input type="button" id="btnAddLayer" value="Add Layer" />
+      </div>
+      <div style="list-style-type: none;" id="layersManager"></div>
+      <canvas id="layerExampleCanvas"></canvas>
+    </span>
+  </span>
+  <!--SHAPES EDITOR-->
+  <span class="window hidden" id="shapeEditor" style="top: 256px; right: 0; z-index: 100;">
+    <span class="windowBar">
+      <span>Shape Editor</span>
+      <button id="closeShapeEditor" class="closeButton">⨯</button>
+    </span><br>
+    <span class="windowContent">
+      <div id="shapePropertiesTable">
+
+        <div class="propertyRow" name="name">
+          <div class="col-50">
+            <label for="shapeName">Name</label>
+          </div>
+          <div class="col-50">
+            <input type="text" id="shapeName" class="propertyValue" name="name" />
+          </div>
+        </div>
+        <div class="propertyRow" name="desc">
+          <div class="col-50">
+            <label for="shapeDesc">Description</label>
+          </div>
+          <div class="col-50">
+            <input type="text" id="shapeDesc" class="propertyValue" name="desc" disabled />
+          </div>
+        </div>
+        <div class="propertyRow" name="x">
+          <div class="col-50">
+            <label for="shapeX">X</label>
+          </div>
+          <div class="col-50">
+            <input type="number" id="shapeX" class="propertyValue" name="x" />
+          </div>
+        </div>
+        <div class="propertyRow" name="y">
+          <div class="col-50">
+            <label for="shapeY">Y</label>
+          </div>
+          <div class="col-50">
+            <input type="number" id="shapeY" class="propertyValue" name="y" />
+          </div>
+        </div>
+        <div class="propertyRow" name="width">
+          <div class="col-50">
+            <label for="shapeWidth">Width</label>
+          </div>
+          <div class="col-50">
+            <input type="number" id="shapeWidth" class="propertyValue" name="width" />
+          </div>
+        </div>
+        <div class="propertyRow" name="height">
+          <div class="col-50">
+            <label for="shapeHeight">Height</label>
+          </div>
+          <div class="col-50">
+            <input type="number" id="shapeHeight" class="propertyValue" name="height" />
+          </div>
+        </div>
+        <div class="propertyRow" name="radius">
+          <div class="col-50">
+            <label for="shapeRadius">Radius</label>
+          </div>
+          <div class="col-50">
+            <input type="number" id="shapeRadius" class="propertyValue" name="radius" />
+          </div>
+        </div>
+        <div class="propertyRow" name="radiusX">
+          <div class="col-50">
+            <label for="shapeRadiusX">Radius X</label>
+          </div>
+          <div class="col-50">
+            <input type="number" id="shapeRadiusX" class="propertyValue" name="radiusX" />
+          </div>
+        </div>
+        <div class="propertyRow" name="radiusY">
+          <div class="col-50">
+            <label for="shapeRadiusY">Radius Y</label>
+          </div>
+          <div class="col-50">
+            <input type="number" id="shapeRadiusY" class="propertyValue" name="radiusY" />
+          </div>
+        </div>
+        <div class="propertyRow" name="startAngle">
+          <div class="col-50">
+            <label for="shapeStartAngle">Start Angle (°)</label>
+          </div>
+          <div class="col-50">
+            <input type="range" id="shapeStartAngle" class="propertyValue" name="startAngle" step="0.01" min="0"
+              max="360" />
+          </div>
+        </div>
+        <div class="propertyRow" name="endAngle">
+          <div class="col-50">
+            <label for="shapeEndAngle">End Angle (°)</label>
+          </div>
+          <div class="col-50">
+            <input type="range" id="shapeEndAngle" class="propertyValue" name="endAngle" step="0.01" min="0"
+              max="360" />
+          </div>
+        </div>
+        <div class="propertyRow" name="backgroundColor">
+          <div class="col-50">
+            <label for="shapeBackgroundColor">Background Color</label>
+          </div>
+          <div class="col-50">
+            <input type="color" id="shapeBackgroundColor" class="propertyValue" name="backgroundColor" />
+          </div>
+        </div>
+        <div class="propertyRow" name="opacity">
+          <div class="col-50">
+            <label for="shapeOpacity">Opacity</label>
+          </div>
+          <div class="col-50">
+            <input type="range" id="shapeOpacity" min="0" max="1" step="0.01" class="propertyValue" name="opacity" />
+          </div>
+        </div>
+
+        <div class="propertyRow" name="borderColor">
+          <div class="col-50">
+            <label for="shapeBorderColor">Border Color</label>
+          </div>
+          <div class="col-50">
+            <input type="color" id="shapeBorderColor" class="propertyValue" name="borderColor" />
+          </div>
+        </div>
+        <div class="propertyRow" name="borderWidth">
+          <div class="col-50">
+            <label for="shapeBorderWidth">Border Width</label>
+          </div>
+          <div class="col-50">
+            <input type="number" id="shapeBorderWidth" class="propertyValue" name="borderWidth" />
+          </div>
+        </div>
+        <div class="propertyRow" name="rotation">
+          <div class="col-50">
+            <label for="shapeRotation">Rotation</label>
+            (Step of
+            <input style="width: 55px;" type="number" id="shapeRotationRangeStep" step="1" min="1" value="1">º)
+          </div>
+          <div class="col-50">
+            <input type="range" id="shapeRotation" class="propertyValue" name="rotation" step="0.01" min="0"
+              max="360" />
+          </div>
+        </div>
+        <div class="propertyRow" name="mirror">
+          <div class="col-50">
+            <label for="shapeMirror">Mirror</label>
+          </div>
+          <div class="col-50">
+            <input type="checkbox" id="shapeMirror" class="propertyValue" name="mirror" />
+          </div>
+        </div>
+        <div class="propertyRow" name="src">
+          <div class="col-50">
+            <label for="shapeSrc">Source</label>
+          </div>
+          <div class="col-50">
+            <input type="text" id="shapeSrc" class="propertyValue" name="src" />
+          </div>
+        </div>
+      </div>
+    </span>
+  </span>
+
+  <!--Project Shape-->
+  <span class="window hidden" id="projectShapeWindow" style="top: 256px; left: 300px; z-index: 100;">
+    <span class="windowBar">
+      <span>Project Shape</span>
+      <button id="closeProjectShapeWindow" class="closeButton">⨯</button>
+    </span><br>
+    <span class="windowContent">
+      <div id="projectShapeContent">
+        <label for="selectShapeToProject">Select Shape to Project:</label>
+        <select id="selectShapeToProject">
+          <option value="" disabled selected>Select a shape</option>
+        </select>
+        <br><br>
+        <button id="projectShapeButton">Project Shape</button>
+      </div>
+    </span>
+  </span>
+</template>
+
+<style scoped></style>

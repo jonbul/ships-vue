@@ -6,6 +6,7 @@ import LoginView from '@/LoginView.vue'
 import RegisterView from '@/RegisterView.vue'
 import ProjectsView from '@/paintingBoard/ProjectsView.vue'
 import PaintingBoardView from '@/paintingBoard/PaintingBoardView.vue'
+import AdminView from '@/AdminView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -16,7 +17,8 @@ const router = createRouter({
     {path: '/login', name: 'login', component: LoginView},
     {path: '/register', name: 'register', component: RegisterView},
     {path: '/paintingBoard/projects', name: 'projects', component: ProjectsView},
-    {path: '/paintingBoard', name: 'paintingBoard', component: PaintingBoardView}
+    {path: '/paintingBoard', name: 'paintingBoard', component: PaintingBoardView},
+    {path: '/game/admin', name: 'admin', component: AdminView}
   ],
 })
 

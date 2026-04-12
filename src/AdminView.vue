@@ -13,7 +13,7 @@ onMounted(() => {
 
 <template>
   <div class="container">
-    <form action="/game/admin" method="post" class="form-register" id="form-register">
+    <div class="form-register" id="form-register">
       <h1 class="h3 mb-3 font-weight-normal">Administration panel</h1>
 
       <div class="form-group">
@@ -34,7 +34,7 @@ onMounted(() => {
       <button class="btn btn-lg btn-primary btn-block" type="submit" id="save">Save</button>
       <iframe id="statusMonitor" src=""
         style="width:100%; height: 1030px; border: solid 1px #ccc; margin-top:20px;"></iframe>
-    </form>
+    </div>
   </div>
 </template>
 

@@ -5,6 +5,17 @@ async function load() {
   const selectAllowedPlayerType = document.getElementById("allowedPlayerType");
   const selectResolution = document.getElementById("resolution");
 
+  document.getElementById("save").addEventListener("click", async (e) => {
+    e.preventDefault();
+    const allowedPlayerType = selectAllowedPlayerType.value;
+    const resolution = selectResolution.value;
+    await asyncRequest({
+      path: '/game/admin',
+      method: 'POST',
+      data: { allowedPlayerType, resolution }
+    });
+  });
+
   for (const type in data.allowedPlayerTypes) {
     const option = document.createElement("option");
     option.value = data.allowedPlayerTypes[type];

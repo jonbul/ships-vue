@@ -18,7 +18,7 @@ import {
 const contantsUrl = apiHost + '/constants.js';
 const { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW } = await import(contantsUrl);
 */
-import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW } from '/js/utils/constants.js';
+import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED } from '/js/utils/constants.js';
 import { asyncRequest, showAlert } from '/js/utils/functions.js';
 import { Animation, getExplossionFrames } from './animationClass.js';
 import gameSounds from './gameSounds.js';
@@ -322,21 +322,22 @@ class Game {
             x: player.x,
             y: player.y
         }
+
         this.player.moving = this.keys[KEYS.LEFT] || this.keys[KEYS.RIGHT];
         if (this.keys[KEYS.UP]) {
-            player.speed += 0.2;
+            player.speed += SPEED.STEP;
         }
-        if (this.keys[KEYS.DOWN] && player.speed) {
-            player.speed -= 0.2;
+        if (this.keys[KEYS.DOWN] && player.speed > SPEED.MIN) {
+            player.speed -= SPEED.STEP;
         }
-        if (player.speed >= 50) player.speed = 50;
-        if (player.speed < -20) player.speed = -20;
+        if (player.speed >= SPEED.MAX) player.speed = SPEED.MAX;
+        if (player.speed < SPEED.MIN) player.speed = SPEED.MIN;
 
         if (this.keys[KEYS.LEFT]) {
-            player.rotate -= 0.02;
+            player.rotate -= SPEED.ROTATION;
         }
         if (this.keys[KEYS.RIGHT]) {
-            player.rotate += 0.02;
+            player.rotate += SPEED.ROTATION;
         }
         if (player.rotate >= 2 * Math.PI) player.rotate -= 2 * Math.PI;
         if (player.rotate < 0) player.rotate = 2 * Math.PI + player.rotate;

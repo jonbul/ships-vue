@@ -168,8 +168,8 @@ class GameStatus {
     }
 }
 
-(async function name(params) {
-    const gameData = await asyncRequest({ path: '/game/data', method: 'GET' });
-    new GameStatus(gameData.canvasWidth, gameData.canvasHeight);
-})()
-new GameStatus();
+const data = await asyncRequest({ path: '/game/data' });
+const canvas = document.getElementById('canvas')
+canvas.width = data.canvasWidth;
+canvas.height = data.canvasHeight;
+new GameStatus(data.canvasWidth, data.canvasHeight);

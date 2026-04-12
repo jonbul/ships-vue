@@ -14,7 +14,7 @@ onMounted(() => {
 
 <template>
   <div class="container">
-    <canvas class="mt-2" id="canvas" width="<%= canvasWidth %>" height="<%= canvasHeight %>"></canvas>
+    <canvas class="mt-2" id="canvas"></canvas>
     <table>
       <thead>
         <tr>

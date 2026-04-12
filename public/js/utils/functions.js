@@ -8,7 +8,6 @@ const protocol = "https:";
 const baseUrl = `${protocol}//${host}:3000`;
 
 async function asyncRequest({ path, method, data, silent = false }) {
-    const token = await cookieStore.get('token');
     if (path.indexOf('/') !== 0) {
         path = '/' + path;
     }
@@ -17,7 +16,6 @@ async function asyncRequest({ path, method, data, silent = false }) {
         method: method || 'GET',
         headers: {
             'Content-Type': 'application/json;charset=UTF-8',
-            'Authorization': `${token ? 'Bearer ' + token.value : ''}`
         },
         body: data && typeof data === "object" ? JSON.stringify(data) : data
     }).then(response => {
@@ -28,7 +26,6 @@ async function asyncRequest({ path, method, data, silent = false }) {
                     err = 'Bad Request';
                 } else if (response.status === 401) {
                     err = 'Unauthorized';
-                    cookieStore.delete('token');
                     localStorage.removeItem('user');
                 } else if (response.status === 403) {
                     err = 'Forbidden';

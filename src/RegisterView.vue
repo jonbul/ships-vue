@@ -37,7 +37,7 @@ onMounted(() => {
           name="cpassword">
       </div>
 
-      <button class="btn btn-lg btn-primary btn-block" type="submit" id="register">Register</button>
+      <button class="btn btn-lg btn-primary btn-block" type="button" id="register">Register</button>
       <span class="ml-auto">Already have an account? <a href="/login">Login here</a></span>
     </div>
   </div>

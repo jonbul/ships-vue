@@ -31,7 +31,7 @@ onMounted(() => {
         </select>
       </div>
 
-      <button class="btn btn-lg btn-primary btn-block" type="submit" id="save">Save</button>
+      <button class="btn btn-lg btn-primary btn-block" type="button" id="save">Save</button>
       <iframe id="statusMonitor" src=""
         style="width:100%; height: 1030px; border: solid 1px #ccc; margin-top:20px;"></iframe>
     </div>

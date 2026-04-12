@@ -41,7 +41,7 @@ onMounted(() => {
           </label>
         </div>
 
-        <button class="btn btn-lg btn-primary btn-block" type="submit" id="btnLogin">Login</button>
+        <button class="btn btn-lg btn-primary btn-block" type="button" id="btnLogin">Login</button>
         <span>Don't have an account? <a href="/register">Register here</a></span>
       </div>
     </div>

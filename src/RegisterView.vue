@@ -12,7 +12,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="container">
+  <div class="container register">
     <div class="form-register" id="form-register">
       <h1 class="h3 mb-3 font-weight-normal">Please sign in</h1>
 

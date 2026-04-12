@@ -14,7 +14,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="container">
+  <div class="container paintingBoard">
     <div id="paintingBoard" class="paintingBoardWindowed">
       <div id="projectTitleBar">
         <input id="projectName" class="" placeholder="Name">

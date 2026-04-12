@@ -13,7 +13,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="container">
+  <div class="container game">
     <div id="shipSelector" class="container">
       <div id="shipSelectorControl">
         <button id="previousShip" style="transform: scaleX(-1);">&#x27A4;</button>

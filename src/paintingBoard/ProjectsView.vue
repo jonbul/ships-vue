@@ -13,7 +13,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="container">
+  <div class="container projects">
     <a id="newProjectBtn" href="/paintingBoard" class="btn btn-primary mt-5">New</a>
     <div id="projectBoard">
 

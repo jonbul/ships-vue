@@ -13,7 +13,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="container">
+  <div class="container gameStatus">
     <canvas class="mt-2" id="canvas"></canvas>
     <table>
       <thead>

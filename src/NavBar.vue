@@ -18,6 +18,7 @@ onMounted(() => {
 
 <template>
     <nav id="mainNavbar">
+        <!-- vue -->
         <a class="mainNavbar-brand" href="#">JAES</a>
         <button class="navbar-button" type="button" data-toggle="collapse" data-target="#navbarNav"
             aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">

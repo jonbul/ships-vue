@@ -3,8 +3,8 @@ set -x # show comands in execution
 
 #which docker
 docker ps -a
-CONTAINER_NAME="ships_vue"
-IMAGE_NAME="ships_vue:latest"
+CONTAINER_NAME="ships_vue-container"
+IMAGE_NAME="ships_vue-image"
 
 
 echo "Usuario actual: $(whoami)"
@@ -13,7 +13,7 @@ docker stop $CONTAINER_NAME
 echo ____________________ BORRAR DOCKER
 docker rm $CONTAINER_NAME
 echo ____________________ BORRAR IMAGEN DOCKER
-docker rmi $IMAGE_NAME
+docker rmi $IMAGE_NAME:latest
 echo ____________________ CLONAR REPO
 cd /home/jonbul/servers
 

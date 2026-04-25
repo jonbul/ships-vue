@@ -49,17 +49,17 @@ if (projects) {
 
         projectBoard.appendChild(card);
     }
+
     function deleteProject(id, card) {
         asyncRequest({
             path: `../paintingBoard/projects?id=${id}`,
             method: 'DELETE'
-        }).then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    card.remove();
-                } else {
-                    alert('Failed to delete project.');
-                }
-            });
+        }).then(data => {
+            if (data.success) {
+                card.remove();
+            } else {
+                alert('Failed to delete project.');
+            }
+        });
     }
 }

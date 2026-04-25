@@ -15,6 +15,7 @@ export default class MessagesManager {
         this.lineHeight = game.lineHeight;
         this.y = parseInt(game.canvas.height - game.lineHeight * 6);
     }
+
     add(msg) {
         this.messages.push({
             text: msg,
@@ -22,13 +23,16 @@ export default class MessagesManager {
             opacity: 1
         });
     }
+
     addKillMessage(name1, name2) {
         const killword = KILLWORDS[parseInt(Math.random() * KILLWORDS.length)];
         this.add(`☠ ${name1} HAS ${killword} ${name2}`)
     }
+
     getColor(alpha) {
         return `rgba(19, 255, 3, ${alpha})`;
     }
+
     draw() {
         const x = this.player.x - this.canvas.width / 2 + this.player.width / 2 + this.lineHeight;
         const y = this.player.y - this.canvas.height / 2 + this.player.height / 2 + this.y;

@@ -15,7 +15,7 @@ async function asyncRequest({ path, method, data, silent = false }) {
         credentials: 'include',
         method: method || 'GET',
         headers: {
-            'Content-Type': 'application/json;charset=UTF-8',
+            'Content-Type': 'application/json;charset=UTF-8'
         },
         body: data && typeof data === "object" ? JSON.stringify(data) : data
     }).then(response => {
@@ -51,10 +51,9 @@ async function asyncRequest({ path, method, data, silent = false }) {
         if (method && method.toUpperCase() !== 'GET') {
             //showAlert({ type: ALERT_TYPES.SUCCESS, msg: 'Operation successful', title: 'Success' });
         }
-        return response.json();
+        return response.json().catch(() => response.text());
     });
 }
-
 
 function showAlert({ type = 'danger', msg, title, duration = 3000 }) {
     const validTypes = ['primary', 'secondary', 'success', 'danger', 'warning', 'info', 'light', 'dark'];
@@ -130,6 +129,17 @@ function parseShape(shape) {
 
     if (CONST.PICTURE === newShape.desc) {
         const img = new Image()
+
+        img.onload = () => {
+            img.srcError = false;
+        }
+        img.onerror = () => {
+            img.srcError = true;
+            console.warn('Error loading image:', newShape.src);
+            if (location.pathname.indexOf('paintingBoard') > 0) {
+                showAlert({ type: 'warning', msg: 'Error loading given Picture. Try to reload it from a different source.', title: 'Warning' });
+            }
+        }
         img.src = newShape.src;
         newShape.img = img;
     } else if (CONST.PROJECT_SHAPE === newShape.desc) {

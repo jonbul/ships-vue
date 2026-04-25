@@ -1,4 +1,4 @@
-import {parseLayers} from '/js/utils/functions.js';
+import { parseLayers } from '/js/utils/functions.js';
 
 
 class CharacterSelector {
@@ -46,7 +46,7 @@ class CharacterSelector {
         canvas.style.display = "block";
         canvas.style.maxWidth = "200px";
         canvas.style.minWidth = "200px";
-        
+
         ship.parsedLayers = parsedLayers;
         ship.context = context;
         ship.shipBlock = shipBlock;

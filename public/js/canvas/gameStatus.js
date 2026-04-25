@@ -7,8 +7,11 @@ import { asyncRequest } from '/js/utils/functions.js';
 class GameStatus {
     constructor(canvasWidth, canvasHeight) {
         const _this = this;
+        (async function () {
+            _this.drawMapInterval();
+        })();
         this.canvasWidth = canvasWidth;
-        this.canvasHeight = canvasHeight
+        this.canvasHeight = canvasHeight;
         this.canvas = document.getElementById('canvas');
         this.context = this.canvas.getContext('2d');
         this.backgroundCards = {};
@@ -20,29 +23,19 @@ class GameStatus {
         this.mouseEvent();
         this.playersDetails = document.getElementById('playersDetails');
         this.ships = null;
-        this.requestInProgress = false;
-
-        (async function () {
-            _this.drawMapInterval();
-        })();
     }
+
     drawMapInterval() {
         const func = async () => {
-            if (this.requestInProgress) return;
-            this.requestInProgress = true;
-            try {
-                const data = (await asyncRequest({ path: '/gameData', method: 'POST', data: this.backgroundCardsSorted }));
-                if (!data) return;
-                this.players = data.players;
-                this.writePlayersTable(data.players);
-                this.drawMap(data.resultCards);
-            } catch (error) {
-                console.error(error);
-            }
-            this.requestInProgress = false;
+            const data = (await asyncRequest({ path: '/gameData', method: 'POST', data: this.backgroundCardsSorted }));
+            if (!data) return;
+            this.players = data.players;
+            this.writePlayersTable(data.players);
+            this.drawMap(data.resultCards);
         };
         setInterval(func, 1000);
     }
+
     writePlayersTable(players) {
         this.playersDetails.innerHTML = '';
         const props = [
@@ -63,6 +56,7 @@ class GameStatus {
             this.playersDetails.appendChild(tr);
         }
     }
+
     async drawMap(resultCards) {
         if (!this.ships || Object.keys(this.ships).length === 0) {
             const shipList = await asyncRequest({ path: '/game/getShips', method: 'GET' });
@@ -145,6 +139,7 @@ class GameStatus {
             }
         }
     }
+
     mouseEvent() {
         const block = document.createElement('div');
         block.style.position = 'absolute';

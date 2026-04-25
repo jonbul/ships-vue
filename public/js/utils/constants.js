@@ -26,16 +26,19 @@ const KEYS = {
     MINUS: 109,
     F11: 122
 }
+
 const MOUSE_KEYS = {
     LEFT: 0,
     CENTER: 1,
     RIGHT: 2
 }
+
 const MOUSE_KEYS_BUTTONS = {
     LEFT: 0b0001,
     CENTER: 0b0100,
     RIGHT: 0b0010
 }
+
 const KILLWORDS = [
     'KILLED',
     'DEFEATED',
@@ -46,7 +49,6 @@ const KILLWORDS = [
 ]
 const CHARGE_TIME = 4;
 const CHARGE_TIME_OVERFLOW = 1;
-
 
 const ALERT_TYPES = {
     PRIMARY: 'primary',

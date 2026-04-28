@@ -1,0 +1,291 @@
+.paintingBoardWindowed {
+    .window {
+        position: absolute;
+        background-color: white;
+        border-style: ridge;
+        max-height: 1000px;
+        cursor: default;
+
+
+        .windowBar {
+            background-color: blue;
+            width: 100%;
+            display: inline-block;
+            color: white;
+        }
+
+        &#toolsWindow,
+        &#colorWindow {
+            .windowContent {
+                overflow: hidden !important;
+                resize: none !important;
+                height: auto !important;
+            }
+        }
+
+        &#layerWindow,
+        &#colorWindow {
+            width: 225px;
+        }
+
+        &#toolsWindow {
+
+            label {
+                display: inline-block;
+                text-align: center;
+                width: 32px;
+                height: 32px;
+                margin: 2px;
+                cursor: pointer;
+                background-color: #ddddff;
+                border: dotted 1px black;
+                line-height: 32px;
+                font-size: 20px;
+
+
+                &:hover {
+                    background-color: #aaaaff;
+                }
+            }
+
+            input[type="checkbox"] {
+                display: none;
+            }
+
+            #followGrid:checked+label[for="followGrid"] {
+                color: red !important
+            }
+
+            #followGrid:checked~label[for="followGrid"]~br~span {
+                display: inline-block !important;
+            }
+
+            #followGrid~label[for="followGrid"]~br~span {
+                display: none;
+            }
+
+            #toolList {
+
+                input:checked + label {
+                    color: red !important
+                }
+
+                input[type="radio"] {
+                    display: none;
+                }
+
+            }
+        }
+
+        #layerWindow_buttons {
+            margin: 5px 0 0 0;
+            padding: 0 5px 5px 5px;
+
+            >input {
+                width: 100%;
+            }
+        }
+
+        .windowContent {
+            resize: vertical;
+            overflow-y: scroll;
+            border-style: ridge;
+            display: block;
+            background-color: #cccccc;
+
+            input[type="number"] {
+                width: 50px;
+            }
+
+            input[type="text"] {
+                width: 100px;
+
+            }
+
+            .windowBar {
+                background-color: blue;
+                width: 100%;
+                display: inline-block;
+                color: white;
+            }
+
+
+            label[for=imageLoader] {
+                cursor: pointer
+            }
+
+            #imageLoader {
+                display: none;
+            }
+
+            #layersManager {
+                background-color: #fff;
+                border: solid 1px black;
+                margin: 5px;
+
+                .layersManager_layer_title,
+                .layersManager_shapes_title {
+                    cursor: grabbing;
+                    line-height: 25px;
+                }
+
+                >.layersManager_layer {
+
+                    background-color: #fff;
+
+                    &[selected=true] {
+
+                        >.layersManager_layer_head,
+                        >.layersManager_layer_head>.layersManager_layer_tools {
+                            background-color: #8888ff;
+                        }
+                    }
+
+
+
+                    >.layersManager_layer_head {
+                        display: flow-root;
+                        padding: 5px;
+                        border-bottom: solid 1px black;
+                        border-top: solid 1px black;
+
+
+                    }
+
+                    >.layersManager_layer_shapes {
+                        min-height: 30px;
+                        transition: all 0.3s ease;
+
+                        &.hidden {
+                            display: none;
+                        }
+
+                        >.layersManager_shapes_head {
+                            padding: 5px 5px 5px 20px;
+                            display: flow-root;
+                        }
+                    }
+
+                    /* All buttons */
+                    .layersManager_layer_tools,
+                    .layersManager_shape_tools {
+                        float: right;
+
+                        >button {
+                            width: 25px;
+                            height: 25px;
+                            gap: 5px;
+                            background-color: #fff0;
+                            border-style: none;
+                            outline: none;
+                            cursor: pointer;
+                            text-align: center;
+                            vertical-align: middle;
+                            border-radius: 13px;
+
+                            &:hover {
+                                background-color: #00000055;
+                            }
+
+                            &.btnShowShapes {
+
+                                &:before {
+                                    content: "\002D"
+                                }
+
+                                &.closed:before {
+                                    content: "\002B" !important
+                                }
+
+                            }
+
+                            &.btnLayerHide[hide=true] {
+                                color: #888;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
+        &#shapeEditor,&#projectShapeWindow {
+            width: 500px;
+            z-index: 999999;
+
+            &.hidden {
+                display: none;
+            }
+
+            .closeButton {
+                float: right;
+            }
+
+            .windowContent {
+                max-height: 400px;
+                overflow-y: auto;
+
+                .propertyRow {
+                    display: flex;
+                    padding: 5px 10px;
+                    background-color: #fff !important;
+                    border: solid 1px #000000;
+
+                    &.hidden {
+                        display: none;
+                    }
+
+                    .col-50 {
+                        width: 50%;
+                        box-sizing: border-box;
+                        padding: 0 5px;
+
+                        label {
+                            white-space: nowrap;
+                        }
+
+                        input,
+                        select {
+                            width: 100%;
+                            box-sizing: border-box;
+                            border-style: none;
+                            outline: none;
+                        }
+
+                        &:first-child {
+                            border-right: solid 1px #000000;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+.layersManager_layer {
+    background-color: #fff;
+
+    &.moving {
+        width: 200px;
+        z-index: 9999999;
+        position: absolute;
+
+        .layersManager_layer_tools,
+        .layersManager_layer_shapes {
+            display: none;
+        }
+
+    }
+}
+
+.layersManager_shapes_head {
+    background-color: #fff;
+
+    &.moving {
+        width: 200px;
+        z-index: 9999999;
+        position: absolute;
+
+
+    }
+}

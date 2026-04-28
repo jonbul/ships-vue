@@ -1,0 +1,100 @@
+import { Arc, Layer } from './canvasClasses.js';
+
+class Animation {
+    constructor({ repeat = false, frames = [], layer = new Layer(), x = 0, y = 0, width = 0, height = 0, speed = 1, onEnd }) {
+        this.repeat = repeat;
+        this.frames = frames;
+        this.layer = layer;
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.speed = speed;
+        this.onEnd = onEnd;
+        this.playing = false;
+        this.currentFrame = -1;
+    }
+
+    play() {
+        this.playing = true;
+    }
+
+    pause() {
+        this.playing = false;
+    }
+
+    stop() {
+        this.playing = false;
+        this.currentFrame = -1;
+    }
+
+    drawFrame(context, drawable) {
+        this.currentFrame += this.speed;
+        if (this.currentFrame >= this.frames.length) {
+            if (this.repeat) {
+                this.currentFrame = 0;
+            } else {
+                this.stop();
+            }
+        }
+        const frameActions = this.frames[this.currentFrame];
+        if (frameActions && frameActions.length && drawable) frameActions.forEach(action => action());
+        this.layer.draw(context, { x: this.x, y: this.y });
+
+        if (this.onEnd && !this.repeat && this.currentFrame >= this.frames.length - 1)
+            this.onEnd();
+    }
+}
+
+function getExplossionFrames() {
+    const arc1 = new Arc(0, 0, 0, '#ff0000');
+    const arc2 = new Arc(-25, -25, 0, '#ff0000');
+    const arc3 = new Arc(-25, 25, 0, '#ff0000');
+    const arc4 = new Arc(25, -25, 0, '#ff0000');
+    const arc5 = new Arc(25, 25, 0, '#ff0000');
+    const shapes = [arc1, arc2, arc3, arc4, arc5];
+    const layer = new Layer('', shapes);
+    const incArc = (e, increment) => e.radius += increment;
+    const toWhite = (e) => e.backgroundColor = '#ffffff';
+    const toRed = (e) => e.backgroundColor = '#ff0000';
+    const incArcWhite = (e, increment) => {
+        incArc(e, increment);
+        toWhite(e);
+    }
+    const incArcRed = (e, increment) => {
+        incArc(e, increment);
+        toRed(e);
+    }
+    const restart = () => {
+        arc1.radius = 0;
+        arc2.radius = 0;
+        arc3.radius = 0;
+        arc4.radius = 0;
+        arc5.radius = 0;
+    }
+    const frames = [[restart]];
+    const increment = 1;
+
+    for (let i = 0; i < 49; i++) {
+        addActionInFrame(i * 10, incArcRed.bind(null, arc1, increment));
+        addActionInFrame(i * 10 + 5, incArcWhite.bind(null, arc1, increment));
+
+        addActionInFrame(i * 10 + 5, toRed.bind(null, arc2));
+        addActionInFrame(i * 10, incArcWhite.bind(null, arc2, increment));
+        addActionInFrame(i * 10 + 5, toRed.bind(null, arc3));
+        addActionInFrame(i * 10, incArcWhite.bind(null, arc3, increment));
+        addActionInFrame(i * 10 + 5, toRed.bind(null, arc4));
+        addActionInFrame(i * 10, incArcWhite.bind(null, arc4, increment));
+        addActionInFrame(i * 10 + 5, toRed.bind(null, arc5));
+        addActionInFrame(i * 10, incArcWhite.bind(null, arc5, increment));
+    }
+
+    return { layer, frames }
+
+    function addActionInFrame(frame = 0, action) {
+        frames[frame] = frames[frame] || [];
+        frames[frame].push(action);
+    }
+}
+
+export { Animation, getExplossionFrames };

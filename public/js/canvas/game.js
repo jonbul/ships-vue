@@ -1,0 +1,1023 @@
+'use strict';
+import {
+    Arc,
+    Layer,
+    Line,
+    Rect,
+    Text
+} from './canvasClasses.js';
+import {
+    Bullet,
+    RadarArrow,
+    ChargingBar,
+    Player
+} from './gameClasses.js';
+
+import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED } from '/js/utils/constants.js';
+import { asyncRequest, showAlert } from '/js/utils/functions.js';
+import { Animation, getExplossionFrames } from './animationClass.js';
+import gameSounds from './gameSounds.js';
+import MessagesManager from './messagesManagerClass.js';
+
+const backendHost = (window.location.host.substring(0, window.location.host.indexOf(':')) || window.location.host) + ':3000';
+const websocketHost = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + backendHost;
+
+class Game {
+    constructor(canvas, username, credits, isSmartphone, ship, shipsManager) {
+
+        window.game = this;
+        this.isSmartphone = isSmartphone;
+        this.inFullScreen = window.innerHeight === parseInt(getComputedStyle(canvas).height);
+        this.canvas = canvas;
+        this.context = canvas.getContext('2d');
+
+        this.credits = credits;
+        this.ship = ship;
+        this.backgroundCards = [];
+        this.players = {};
+        this.bullets = {};
+        this.keys = [];
+        this.shipsManager = shipsManager;
+        this.radarZoom = 1;
+        window.game = this;
+        this.username = username
+
+        this.loadEvents();
+
+        this.createStaticCanvas();
+
+        // Wait for connection
+        this.ws = new WebSocket(websocketHost);
+        if (this.ws.readyState === WebSocket.CONNECTING) {
+            this.ws.addEventListener('open', this.onWebSocketOpen.bind(this));
+        } else if (this.ws.readyState === WebSocket.OPEN) {
+            this.onWebSocketOpen();
+        }
+    }
+
+    async onWebSocketOpen() {
+        const tempPlayers = (await asyncRequest({ path: '/game/getPlayers', method: 'GET' }));
+        for (const id in tempPlayers) {
+            this.updatePlayers(tempPlayers[id]);
+        }
+
+        if (!this.ship) {
+            const baseShips = this.shipsManager.getGenericShips();
+            const index = parseInt(Math.random() * baseShips.length)
+            this.ship = baseShips[index]
+        }
+
+        this.player = new Player(this.shipsManager.getShipById(this.ship._id), this.username, this.ship._id, 0, 0, this.credits);
+        this.chargingBar = new ChargingBar(this.player, this.context);
+
+        this.drawableBullets = new Layer('bullets');
+        this.drawablePlayers = [];
+        do {
+            this.player.x = parseInt(Math.random() * this.canvas.width - this.player.width);
+            this.player.y = parseInt(Math.random() * this.canvas.height - this.player.height);
+        } while (this.checkCollisionsWithPlayers());
+        const tX = this.canvas.width / 2 - this.player.width / 2 - this.player.x;
+        const tY = this.canvas.height / 2 - this.player.height / 2 - this.player.y;
+        this.context.translate(tX, tY);
+
+        this.messagesManager = new MessagesManager(this);
+        this.socketIOEvents();
+    }
+
+    reloadPlayer() {
+        const x = this.player.x;
+        const y = this.player.y;
+
+        do {
+            this.player.x = parseInt(Math.random() * this.canvas.width - this.player.width);
+            this.player.y = parseInt(Math.random() * this.canvas.height - this.player.height);
+        } while (this.checkCollisionsWithPlayers());
+
+        this.context.translate(x - this.player.x, y - this.player.y);
+    }
+
+    _reconnect() {
+        const MAX_ATTEMPTS = 10;
+        const DELAY_MS = 2000;
+        let attempts = 0;
+
+        const tryConnect = () => {
+            attempts++;
+            console.log(`🔄 Reconnecting... Attempt ${attempts}`);
+            showAlert({ msg: `Reconnecting... Attempt ${attempts}`, title: 'Info', type: 'info', duration: 2000 });
+            this.ws = new WebSocket(websocketHost);
+            this.ws.addEventListener('open', () => {
+                console.log('✅ Reconnected. Reloading...');
+                location.reload();
+            });
+            this.ws.addEventListener('close', () => {
+                if (attempts < MAX_ATTEMPTS) {
+                    setTimeout(tryConnect, DELAY_MS);
+                } else {
+                    console.error('❌ All reconnection attempts failed');
+                    showAlert({ msg: 'Failed to reconnect. Please reload the page.', title: 'Error', type: 'danger', duration: 5000 });
+                }
+            });
+        };
+
+        setTimeout(tryConnect, DELAY_MS);
+    }
+
+    socketIOEvents() {
+        this.ws.events = {};
+
+        this.ws.addEventListener('message', event => {
+            const data = JSON.parse(event.data);
+            if (!this.ws.events[data.eventName]) {
+                console.error('No handler for event:', data.eventName);
+                return;
+            }
+            this.ws.events[data.eventName](data);
+        });
+
+        this.ws.on = (function (eventName, callback) {
+            this.ws.events[eventName] = callback.bind(this);
+        }).bind(this);
+
+        this.ws.sendData = (function (eventName, data) {
+            data = data || {};
+            this.ws.send(JSON.stringify({ ...data, eventName }));
+        }).bind(this);
+
+        this.ws.on('gameBroadcast', this.gameBroadcast.bind(this));
+        this.ws.on('player leave', data => {
+            delete this.players[data.socketId];
+            this.updatePlayers();
+        });
+        this.ws.on('playerHit', msg => {
+            if (this.player.isDead) return;
+            if (this.player.life > 0)
+                this.player.life = Math.max(0, this.player.life - msg.bulletCharge);
+            if (!this.player.life) {
+                this.ws.sendData('playerDied', msg);
+                this.bulletCharging = null;
+                this.player.dead();
+                setTimeout(() => {
+                    this.player.hide = true;
+                    this.playerUpdated = true;
+                    setTimeout(() => {
+                        this.playerUpdated = true;
+                        this.reloadPlayer();
+                        this.player.hide = false;
+                        this.player.life = 10;
+                        this.player.isDead = false;
+                    }, 10000);
+                }, 2000);
+            }
+            this.ws.sendData('removeBullet', { bulletId: msg.bulletId });
+        });
+        this.ws.on('sendHome', () => location.href = '/');
+        this.ws.on('getBackgroundCards', data => {
+            data.cards.forEach(card => {
+                const shapes = [];
+                card[2].forEach(point => {
+                    shapes.push(new Arc(
+                        point[0] + card[0] * this.canvas.width,
+                        point[1] + card[1] * this.canvas.height,
+                        point[2],
+                        '#ffffff'
+                    ))
+                })
+                this.backgroundCards[card[0]][card[1]] = new Layer(
+                    `${card[0]},${card[1]}`,
+                    shapes
+                )
+            })
+        })
+
+        // ✅ Manage connection events
+        this.ws.on('connect_error', (error) => {
+            console.error('❌ Connection error:', error.message);
+            showAlert({ msg: 'Connection error. Reconnecting...', title: 'Error', type: 'danger', duration: 5000 });
+        });
+
+        this.ws.on('connect_timeout', () => {
+            console.error('⏱️ Connection timeout');
+            showAlert({ msg: 'Connection timeout', title: 'Error', type: 'danger', duration: 5000 });
+            location.reload();
+        });
+
+        this.ws.addEventListener('close', (event) => {
+            console.warn('⚠️ Disconnected:', event.code, event.reason);
+            this._reconnect();
+        });
+
+        this.ws.on('connectionSuccess', data => {
+            console.log('✅ Connection established with socket ID:', data.socketId);
+            this.socketId = data.socketId;
+            this.player.socketId = data.socketId;
+            this.players[this.player.socketId] = this.player;
+        });
+
+        this.ws.sendData('connectionSuccess');
+
+        this.playerUpdated = true;
+        this.beginInterval();
+        setTimeout(() => {
+            this.ws.sendData('playerData', this.player.getSortDetails());
+        }, 1);
+    }
+
+    beginInterval() {
+        const timestep = 1000 / 30; // 30 updates per second (fixed timestep)
+        let lastTime = null;
+        let accumulator = 0;
+        const loop = (timestamp) => {
+            if (lastTime === null) {
+                lastTime = timestamp;
+            }
+
+            let delta = timestamp - lastTime;
+            lastTime = timestamp;
+
+            // Clamp delta to avoid spiral-of-death after long pauses or tab switches
+            if (delta > 100) {
+                delta = 100;
+            }
+            accumulator += delta;
+            // Run the fixed-timestep game updates
+            while (accumulator >= timestep) {
+                this.intervalMethod();
+                accumulator -= timestep;
+            }
+            requestAnimationFrame(loop);
+        };
+        requestAnimationFrame(loop);
+    }
+
+    toFullScreen(e) {
+
+        console.warn(JSON.stringify({ x: e?.clientX, y: e?.clientY }))
+        if (e && Math.max(e.clientX, e.clientY) > 200)
+            return;
+        const isFullscreen = !!(document.fullscreenElement ||
+            document.webkitFullscreenElement ||
+            document.mozFullScreenElement ||
+            document.msFullscreenElement);
+
+        if (!isFullscreen) {
+            var canvas = this.canvas;
+
+            const requestFullScreen = (canvas.requestFullScreen
+                || canvas.requestFullscreen
+                || canvas.webkitRequestFullscreen
+                || canvas.mozRequestFullScreen
+                || canvas.msRequestFullscreen)
+            if (requestFullScreen) requestFullScreen.call(canvas)
+        } else {
+            document.exitFullscreen()
+        }
+    }
+
+    onPlayerDied(msg) {
+        this.players[msg.playerId].deaths++;
+        this.players[msg.from].kills++;
+        this.players[msg.playerId].calculateScale();
+        this.players[msg.from].calculateScale();
+        const explossionFrames = getExplossionFrames();
+        const playerRealDimension = this.players[msg.playerId].getRealDimension();
+        const explossion = new Animation({
+            frames: explossionFrames.frames,
+            layer: explossionFrames.layer,
+            x: playerRealDimension.x + playerRealDimension.width / 2,
+            y: playerRealDimension.y + playerRealDimension.height / 2,
+            width: 100,
+            height: 100
+        });
+        this.animations.push(explossion);
+        explossion.play();
+        gameSounds.explosion();
+
+        const fromName = this.players[msg.from].name;
+        const diedName = this.players[msg.playerId].name;
+        this.messagesManager.addKillMessage(fromName, diedName);
+    }
+
+    intervalMethod() {
+
+        if (this.isSmartphone) {
+            this.movementSmarphone();
+            //this.movement();
+        } else {
+            this.movement();
+        }
+        this.bulletInterval();
+
+        this.viewRect = {
+            x: this.player.x - (this.canvas.width / 2 - this.player.width / 2),
+            y: this.player.y - (this.canvas.height / 2 - this.player.height / 2),
+            width: this.canvas.width,
+            height: this.canvas.height
+        }
+
+        this.drawablePlayers = [];
+        for (const id in this.players) {
+            if (this.checkRectsCollision(this.players[id], this.viewRect)) {
+                if (!this.players[id].hide) this.drawablePlayers.push(this.players[id]);
+            }
+        }
+        this.drawableBullets.shapes = [];
+        for (const id in this.bullets) {
+            const bullet = this.bullets[id];
+            bullet.moveStep();
+            if (this.socketId === bullet.socketId && bullet.isExpired()) {
+                delete this.bullets[id];
+            } else if (this.checkArcRectCollision(bullet, this.viewRect)) {
+                this.drawableBullets.shapes.push(bullet);
+            }
+        }
+
+        this.loadRadar();
+        this.drawAll();
+
+        if (this.playerUpdated || this.player.moving || this.player.speed) {
+            this.ws.sendData('playerData', this.player.getSortDetails());
+        }
+        this.playerUpdated = false;
+    }
+
+    clear() {
+        const playerRealDimension = this.player.getRealDimension();
+        this.context.clearRect(playerRealDimension.x - this.canvas.width, playerRealDimension.y - this.canvas.height, this.canvas.width * 2, this.canvas.height * 2);
+    }
+    movement() {
+        if (this.player.isDead) return;
+        const player = this.player;
+        const tempPosition = {
+            x: player.x,
+            y: player.y
+        }
+
+        this.player.moving = this.keys[KEYS.LEFT] || this.keys[KEYS.RIGHT];
+        if (this.keys[KEYS.UP]) {
+            player.speed += SPEED.STEP;
+        }
+        if (this.keys[KEYS.DOWN] && player.speed > SPEED.MIN) {
+            player.speed -= SPEED.STEP;
+        }
+        if (player.speed >= SPEED.MAX) player.speed = SPEED.MAX;
+        if (player.speed < SPEED.MIN) player.speed = SPEED.MIN;
+
+        if (this.keys[KEYS.LEFT]) {
+            player.rotate -= SPEED.ROTATION;
+        }
+        if (this.keys[KEYS.RIGHT]) {
+            player.rotate += SPEED.ROTATION;
+        }
+        if (player.rotate >= 2 * Math.PI) player.rotate -= 2 * Math.PI;
+        if (player.rotate < 0) player.rotate = 2 * Math.PI + player.rotate;
+
+        const quad = parseInt(player.rotate / (Math.PI / 2));
+
+        let moveX = Math.abs(Math.cos(player.rotate)) * player.speed;
+        let moveY = Math.abs(Math.sin(player.rotate)) * player.speed;
+        switch (quad) {
+            case 0:
+                break;
+            case 1:
+                moveX *= -1;
+                break;
+            case 2:
+                moveY *= -1;
+                moveX *= -1;
+                break;
+            case 3:
+                moveY *= -1;
+                break;
+        }
+
+        player.x += moveX;
+        player.y += moveY;
+
+        player.x = Math.round(player.x * 100) / 100;
+        player.y = Math.round(player.y * 100) / 100;
+
+        if (player.speed || this.keys[KEYS.LEFT] || this.keys[KEYS.RIGHT]) {
+            if (!this.checkCollisionsWithPlayers()) {
+                this.context.translate(-moveX, -moveY);
+            } else {
+                player.x = tempPosition.x;
+                player.y = tempPosition.y;
+            }
+        }
+    }
+
+    movementSmarphone() {
+        if (this.player.isDead) return;
+        const player = this.player;
+        const tempPosition = {
+            x: player.x,
+            y: player.y
+        }
+
+        player.speed = 0;
+        if (this.deviceorientation) {
+            if (screen.orientation.angle === 90) {
+                player.speed = this.deviceorientation.gamma + 50;
+                player.rotate += this.deviceorientation.beta / 1000
+            } if (screen.orientation.angle === 270) {
+                player.speed = -this.deviceorientation.gamma + 50;
+                player.rotate += -this.deviceorientation.beta / 1000;
+            }
+        }
+
+        if (player.speed >= 50) player.speed = 50;
+        if (player.speed < -20) player.speed = -20;
+        player.speed = player.speed || 0
+
+        if (player.rotate >= 2 * Math.PI) player.rotate -= 2 * Math.PI;
+        if (player.rotate < 0) player.rotate = 2 * Math.PI + player.rotate;
+
+        const quad = parseInt(player.rotate / (Math.PI / 2));
+
+        let moveX = Math.abs(Math.cos(player.rotate)) * player.speed;
+        let moveY = Math.abs(Math.sin(player.rotate)) * player.speed;
+        switch (quad) {
+            case 0:
+                break;
+            case 1:
+                moveX *= -1;
+                break;
+            case 2:
+                moveY *= -1;
+                moveX *= -1;
+                break;
+            case 3:
+                moveY *= -1;
+                break;
+        }
+
+        player.x += moveX;
+        player.y += moveY;
+
+        player.x = Math.round(player.x * 100) / 100;
+        player.y = Math.round(player.y * 100) / 100;
+
+        if (player.speed || this.keys[KEYS.LEFT] || this.keys[KEYS.RIGHT]) {
+            if (!this.checkCollisionsWithPlayers()) {
+                this.context.translate(-moveX, -moveY);
+            } else {
+                player.x = tempPosition.x;
+                player.y = tempPosition.y;
+            }
+        }
+    }
+
+    gameBroadcast(data) {
+        const playersData = data.players;
+
+        for (const idp in playersData) {
+            if (playersData[idp].socketId !== this.player.socketId) {
+                this.updatePlayers(playersData[idp]);
+            } else if (this.player.credits < playersData[idp].credits) {
+                this.players[idp].credits = playersData[idp].credits;
+                this.player.credits = playersData[idp].credits;
+            }
+        }
+        data.kills.forEach(this.onPlayerDied.bind(this));
+
+        this.comingNewBullets(data.newBullets);
+        data.bulletsToRemove.forEach(bulletId => {
+            delete this.bullets[bulletId];
+        });
+    }
+
+    comingNewBullets(newBullets) {
+        newBullets.forEach(newBullet => {
+            const bullet = new Bullet(
+                newBullet.socketId,
+                newBullet.x,
+                newBullet.y,
+                newBullet.angle,
+                newBullet.shootingSpeed,
+                newBullet.rotation,
+                newBullet.radiusX,
+                newBullet.radiusY,
+                newBullet.bulletCharge
+            );
+            bullet.id = newBullet.id;
+            this.bullets[bullet.id] = bullet;
+
+            gameSounds.shot();
+        })
+    }
+
+    updatePlayers(plDetails) {
+        const players = this.players;
+        if (plDetails) {
+            if (!players[plDetails.socketId]) {
+                players[plDetails.socketId] = new Player(this.shipsManager.getShipById(plDetails.shipId), plDetails.name, plDetails.shipId);
+                players[plDetails.socketId].socketId = plDetails.socketId;
+            }
+            players[plDetails.socketId].x = plDetails.x;
+            players[plDetails.socketId].y = plDetails.y;
+            players[plDetails.socketId].rotate = plDetails.rotate;
+            players[plDetails.socketId].hide = plDetails.hide;
+            players[plDetails.socketId].isDead = plDetails.isDead;
+            players[plDetails.socketId].credits = plDetails.credits;
+        }
+    }
+
+    drawAll() {
+        this.clear();
+        let translateX;
+        let translateY;
+        let globalRotation = this.player.rotate + 90 * Math.PI / 180;
+        const playerRealDimension = this.player.getRealDimension();
+        if (this.isSmartphone) {
+            translateX = playerRealDimension.x + (playerRealDimension.width / 2)
+            translateY = playerRealDimension.y + (playerRealDimension.height / 2)
+            this.context.translate(translateX, translateY)
+            this.context.rotate(-globalRotation)
+            this.context.translate(-translateX, -translateY)
+        }
+        this.drawBackground();
+        this.drawableBullets.draw(this.context);
+        for (let p of this.drawablePlayers) {
+            p.draw(this.context);
+        }
+
+        this.animations.forEach(anim => {
+            if (anim.playing) {
+                anim.drawFrame(this.context, this.checkRectsCollision(anim, this.viewRect));
+            }
+        });
+        this.drawArrows();
+
+        if (this.isSmartphone) {
+            this.context.translate(translateX, translateY)
+            this.context.rotate(globalRotation)
+            this.context.translate(-translateX, -translateY)
+        }
+        if (this.bulletCharging) {
+            const chargingTimeSec = (Date.now() - this.bulletCharging) / 1000;
+            const chargeRate = Math.min(1, chargingTimeSec / CHARGE_TIME);
+
+            this.chargingBar.draw(this.context, chargeRate);
+            //Overflow
+            const chargeOverflow = Math.min(chargingTimeSec - CHARGE_TIME, CHARGE_TIME_OVERFLOW);
+            if (chargeOverflow > 0) {
+                const maxRadius = Math.max(playerRealDimension.height, playerRealDimension.width) / 2
+                const radius = chargeOverflow * maxRadius / CHARGE_TIME_OVERFLOW;
+                new Arc(playerRealDimension.x, playerRealDimension.y, radius, "#ffffff50")
+                    .draw(this.context, {
+                        x: playerRealDimension.width / 2,
+                        y: playerRealDimension.height / 2
+                    })
+                if (chargeOverflow >= CHARGE_TIME_OVERFLOW) {
+                    this.bulletCharging = null;
+                    this.ws.sendData('playerHit', {
+                        bulletId: null,
+                        playerId: this.player.socketId,
+                        from: this.player.socketId,
+                        bulletCharge: this.player.life
+                    });
+                }
+            }
+        }
+
+        this.isSmartphone ? this.drawRadarSmartphone() : this.drawRadar();
+
+        this.drawTexts();
+    }
+
+    drawBackground() {
+        const playerRealDimension = this.player.getRealDimension();
+        // Math.floor maneja correctamente coordenadas negativas
+        const currentCard = {
+            x: Math.floor(playerRealDimension.x / this.canvas.width),
+            y: Math.floor(playerRealDimension.y / this.canvas.height)
+        }
+
+        const n = 2;
+        const data = [];
+        for (let dx = -n; dx <= n; dx++) {
+            for (let dy = -n; dy <= n; dy++) {
+                // Módulo siempre positivo: genera claves 0-4 para la caché 5x5
+                const cacheX = ((currentCard.x + dx) % 5 + 5) % 5;
+                const cacheY = ((currentCard.y + dy) % 5 + 5) % 5;
+                if (!this.backgroundCards[cacheX] || !this.backgroundCards[cacheX][cacheY]) {
+                    data.push([cacheX, cacheY]);
+                    this.backgroundCards[cacheX] = this.backgroundCards[cacheX] || [];
+                    this.backgroundCards[cacheX][cacheY] = false;
+                }
+            }
+        }
+
+        if (data.length && !this.requestingBackgroundCards && this.socketId) {
+            this.requestingBackgroundCards = true;
+            this.ws.sendData('getBackgroundCards', { socketId: this.socketId, data });
+        }
+
+        if (!this.background) {
+            this.background = new Rect(
+                this.canvas.width * (currentCard.x - n),
+                this.canvas.height * (currentCard.y - n),
+                this.canvas.width * (n * 2 + 1),
+                this.canvas.height * (n * 2 + 1),
+                '#1c2773'
+            )
+        }
+        this.background.x = this.canvas.width * (currentCard.x - n)
+        this.background.y = this.canvas.height * (currentCard.y - n)
+        this.background.draw(this.context);
+
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const cacheX = ((currentCard.x + dx) % 5 + 5) % 5;
+                const cacheY = ((currentCard.y + dy) % 5 + 5) % 5;
+                if (this.backgroundCards[cacheX]?.[cacheY]?.draw) {
+                    this.backgroundCards[cacheX][cacheY].draw(this.context, {
+                        // offset = posición mundo - posición almacenada en los Arc
+                        x: this.canvas.width * (currentCard.x + dx - cacheX),
+                        y: this.canvas.height * (currentCard.y + dy - cacheY)
+                    });
+                }
+            }
+        }
+    }
+
+    drawArrows() {
+        /****************************** */
+        const rotationAxis = {}
+        const player = this.player;
+        const playerRealDimension = this.player.getRealDimension();
+        if (localStorage.getItem("debug")) {
+            rotationAxis.x = playerRealDimension.x + playerRealDimension.width / 2;
+            rotationAxis.y = playerRealDimension.y + playerRealDimension.width / 2; // uses width to build a regular rect
+            new Arc(rotationAxis.x, rotationAxis.y, this.canvas.width * 0.01, '#00ff00').draw(this.context)
+            new Rect(playerRealDimension.x, playerRealDimension.y, playerRealDimension.width, playerRealDimension.height, 'rgba(0,0,0,0)', '#00ff00', 2).draw(this.context);
+        }
+
+        /****************************** */
+        for (const id in this.players) {
+            const target = this.players[id];
+            const distance = parseInt(this.player.getDistanceToPlayer(target));
+            const inScope = distance < this.canvas.width * 1.5;
+            if (target !== player && inScope && !target.isDead && !this.checkRectsCollision(target, this.viewRect)) {
+                if (localStorage.getItem("debug")) {
+                    /****************************** */
+                    const targetRealDimension = target.getRealDimension();
+                    const rotationAxis2 = {
+                        x: targetRealDimension.x + targetRealDimension.width / 2,
+                        y: targetRealDimension.y + targetRealDimension.width / 2 // uses width to build a regular rect
+                    }
+                    new Line([
+                        { x: rotationAxis.x, y: rotationAxis.y },
+                        { x: rotationAxis2.x, y: rotationAxis2.y },
+                    ], '#ff0000').draw(this.context)
+                    new Arc(rotationAxis2.x, rotationAxis2.y, this.canvas.width * 0.01, '#ff0000').draw(this.context);
+                    new Rect(targetRealDimension.x, targetRealDimension.y, targetRealDimension.width, targetRealDimension.height, 'rgba(0,0,0,0)', '#ff0000', 2).draw(this.context);
+                    /****************************** */
+                }
+                new RadarArrow(this.player, target, this.canvas).draw(this.context, distance);
+            }
+        }
+    }
+
+    loadRadar() {
+        const player = this.player;
+        // r is radar scale
+        const r = this.canvas.width / 10;
+        const x = (this.canvas.width / 2) - r;
+        const y = (this.canvas.height / 2) - r;
+        if (!this.radar) {
+            const shapes = [
+                new Arc(x, y, r, 'rgba(0,0,0,0.5)', '#00ff00', 2),
+                new Arc(x, y, (r / 5) * 4, 'rgba(0,0,0,0)', '#00ff00', 2),
+                new Arc(x, y, (r / 5) * 3, 'rgba(0,0,0,0)', '#00ff00', 2),
+                new Arc(x, y, (r / 5) * 2, 'rgba(0,0,0,0)', '#00ff00', 2),
+                new Arc(x, y, (r / 5), 'rgba(0,0,0,0)', '#00ff00', 2),
+                new Line([{ x, y: y - r }, { x, y: y + r }], '#00ff00', 2),
+                new Line([{ x: x - r, y }, { x: x + r, y }], '#00ff00', 2)
+            ];
+            this.radar = new Layer('Radar', shapes);
+        }
+
+        // radar scope in game units
+        const radarScope = this.canvas.width * (10 / this.radarZoom);
+        this.radarPoints = [];
+        for (const id in this.players) {
+            const target = this.players[id];
+            if (this.player !== target && !target.isDead) {
+                const xLength = target.x - player.x;
+                const yLength = target.y - player.y;
+                const distance = this.player.getDistanceToPlayer(target);
+
+                if (distance < radarScope) {
+                    const radarX = (xLength * r / radarScope) + x;
+                    const radarY = (yLength * r / radarScope) + y;
+                    // Coordinates relative to radar center
+                    this.radarPoints.push({ x: radarX, y: radarY });
+                }
+            }
+        }
+    }
+
+    drawRadar() {
+        const playerRealDimension = this.player.getRealDimension();
+        this.radar.draw(this.context, { x: playerRealDimension.x, y: playerRealDimension.y });
+        const arcPoint = new Arc(0, 0, this.canvas.width / 300, 'rgba(255,0,0,0.7)');
+        this.radarPoints.forEach(point => {
+            arcPoint.x = point.x + playerRealDimension.x;
+            arcPoint.y = point.y + playerRealDimension.y;
+            arcPoint.draw(this.context);
+        })
+    }
+
+    drawRadarSmartphone() {
+        const rotationCenter = this.isSmartphone ? { x: this.radar.shapes[0].x, y: this.radar.shapes[0].y } : {};
+        const rotate = this.isSmartphone ? (-this.player.rotate - 90 * Math.PI / 180) : 0;
+        const options = {
+            x: this.player.x,
+            y: this.player.y,
+            rotate,
+            rotationCenter
+        }
+        this.radar.draw(this.context, options);
+
+        const arcPoint = new Arc(0, 0, this.canvas.width / 300, 'rgba(255,0,0,0.7)');
+        this.radarPoints.forEach(point => {
+
+            arcPoint.x = point.x
+            arcPoint.y = point.y
+            arcPoint.draw(this.context, options);
+        });
+    }
+
+    drawTexts() {
+
+        const texts = [
+            `X: ${parseInt(this.player.x * 100) / 100}`,
+            `Y: ${parseInt(this.player.y * 100) / 100}`,
+            `Speed: ${parseInt(this.player.speed * 100) / 100}`,
+            `Rotation: ${parseInt(this.player.rotate * 360 / (2 * Math.PI))}º`,
+        ];
+
+        const cornerX = this.player.x - this.canvas.width / 2 + this.player.width / 2;
+        const cornerY = this.player.y - this.canvas.height / 2 + this.player.height / 2;
+        const textX = cornerX + this.lineHeight;
+        const textY = cornerY + this.lineHeight;
+        texts.forEach((text, i) => {
+            this.playerInfo.shapes[i].text = text;
+            this.playerInfo.shapes[i].x = textX;
+            this.playerInfo.shapes[i].y = textY + this.lineHeight * i;
+        });
+        this.playerInfo.draw(this.context);
+
+        this.lifeText.text = `Health: ${this.player.life}`;
+        this.lifeText.x = cornerX + this.canvas.width - (this.lifeText.text.length * this.fontSize / 2);
+        this.lifeText.y = textY;
+        this.lifeText.draw(this.context);
+
+        this.creditsText.text = `Credits: ${this.player.credits || 0}`;
+        this.creditsText.x = cornerX + this.canvas.width - (this.creditsText.text.length * this.fontSize / 2);
+        this.creditsText.y = textY + this.lineHeight;
+        this.creditsText.draw(this.context);
+
+        if (this.keys[KEYS.TAB] || this.player.isDead) {
+            this.shadowBackground.x = cornerX;
+            this.shadowBackground.y = cornerY;
+            this.shadowBackground.draw(this.context);
+            const textRows = [['Name', 'Kills', 'Deaths']];
+            for (const id in this.players) {
+                const player = this.players[id];
+                textRows.push([player.name, player.kills, player.deaths]);
+            }
+            const text = new Text('', 0, 0, this.fontSize / 2, 'Digitek', '#13ff03');
+            const topY = cornerY + this.lineHeight;
+
+            let minY;
+            const bgColors = ['rgba(0,0,0,0)', 'rgba(19,255,3,0.3)'];
+            textRows.forEach((row, i) => {
+                row.forEach((column, j) => {
+                    text.text = column;
+                    text.x = cornerX + (this.canvas.width / 7) * (j + 2);
+                    text.y = cornerY + this.lineHeight + this.lineHeight * (i + 1);
+                    text.draw(this.context);
+                    minY = text.y;
+                });
+                new Rect(cornerX + (this.canvas.width / 7) * 2 - this.lineHeight / 2, text.y - this.lineHeight / 2, (this.canvas.width / 7) * 3 + this.lineHeight, this.lineHeight, bgColors[i % 2], '#13ff03', 2).draw(this.context)
+            });
+
+            new Line([
+                {
+                    x: cornerX + (this.canvas.width / 7) * 3 - this.lineHeight / 2,
+                    y: topY + this.lineHeight / 2
+                },
+                {
+                    x: cornerX + (this.canvas.width / 7) * 3 - this.lineHeight / 2,
+                    y: minY + this.lineHeight / 2
+                }], '#13ff03', 3).draw(this.context);
+            new Line([
+                {
+                    x: cornerX + (this.canvas.width / 7) * 4 - this.lineHeight / 2,
+                    y: topY + this.lineHeight / 2
+                },
+                {
+                    x: cornerX + (this.canvas.width / 7) * 4 - this.lineHeight / 2,
+                    y: minY + this.lineHeight / 2
+                }], '#13ff03', 3).draw(this.context);
+        }
+        this.messagesManager.draw();
+    }
+
+    createStaticCanvas() {
+        this.fontSize = this.canvas.width / 1920 * 40;
+        this.lineHeight = this.canvas.width / 1920 * (40 + 10);
+        const fontSize = this.fontSize;
+
+        this.playerInfo = new Layer('Player Info', [
+            new Text('', 0, 0, fontSize, 'Arcade', '#13ff03'),
+            new Text('', 0, 0, fontSize, 'Arcade', '#13ff03'),
+            new Text('', 0, 0, fontSize, 'Arcade', '#13ff03'),
+            new Text('', 0, 0, fontSize, 'Arcade', '#13ff03')
+        ]);
+
+        this.lifeText = new Text('', 0, 150, this.fontSize, 'Arcade', '#13ff03');
+        this.creditsText = new Text('', 0, this.lineHeight + 150, this.fontSize, 'Arcade', '#13ff03');
+
+        this.shadowBackground = new Rect(0, 0, this.canvas.width, this.canvas.height, 'rgba(0,0,0,0.2)');
+        this.animations = [];
+    }
+
+    loadEvents() {
+        document.body.addEventListener('keydown', this.keyDownEvent.bind(this));
+        document.body.addEventListener('keyup', this.keyUpEvent.bind(this));
+        window.addEventListener('blur', this.leaveWindow.bind(this));
+        this.canvas.addEventListener('dblclick', this.toFullScreen.bind(this))
+        if (this.isSmartphone) {
+
+            document.body.addEventListener('touchstart', this.screenTouchEventStart.bind(this));
+            document.body.addEventListener('touchend', this.screenTouchEventEnd.bind(this));
+
+            addEventListener("deviceorientation", (e) => {
+                this.deviceorientation = e
+            })
+        }
+    }
+
+    keyDownEvent(event) {
+        if (this.keys[event.keyCode]) return;
+        this.keys[event.keyCode] = true;
+        if (this.keys[KEYS.TAB]) {
+            event.preventDefault();
+        }
+        if (this.player && !this.player.isDead && event.keyCode === KEYS.SPACE) {
+            this.bulletCharging = Date.now()
+        }
+    }
+
+    keyUpEvent(event) {
+        this.keys[event.keyCode] = false;
+        if (this.player && !this.player.isDead && event.keyCode === KEYS.SPACE) {
+            this.newBullet()
+        }
+        if (event.keyCode === KEYS.PLUS && this.radarZoom > 1) {
+            this.radarZoom--;
+        } else if (event.keyCode === KEYS.MINUS && this.radarZoom < 10) {
+            this.radarZoom++;
+        }
+
+        if (event.keyCode === KEYS.F11) this.toFullScreen()
+    }
+
+    screenTouchEventStart() {
+        if (this.screenTouchEventStarted) return;
+        this.screenTouchEventStarted = true;
+
+        if (this.player && !this.player.isDead) {
+            this.bulletCharging = Date.now()
+        }
+    }
+
+    screenTouchEventEnd() {
+        if (this.player && !this.player.isDead) {
+            this.newBullet()
+        }
+        this.screenTouchEventStarted = false;
+    }
+
+    newBullet() {
+        // 1 every 100ms
+        if (Date.now() - (this.lastBulletTs || 0) <= 100) return;
+        const bullet = this.player.createBullet();
+        const msg = this.player.getCenteredPosition();
+
+        const chargingTime = Math.ceil((Date.now() - this.bulletCharging) / 1000);
+
+        const bulletCharge = Math.min(chargingTime, CHARGE_TIME) * (10 / CHARGE_TIME);
+        bullet.bulletCharge = bulletCharge;
+
+        msg.bullet = bullet.getSortDetails(bulletCharge);
+
+        this.bulletCharging = null;
+
+        this.ws.sendData('newBullet', msg);
+        this.lastBulletTs = Date.now()
+    }
+
+    leaveWindow() {
+        for (const keyCode in this.keys) {
+            this.keys[keyCode] = false;
+        }
+    }
+
+    bulletInterval() {
+        let bulletsUpdated = false;
+        this.player.bullets = this.player.bullets.filter((bullet) => {
+            bullet.moveStep();
+            if (bullet.isExpired()) {
+                delete this.player.bullets[bullet.id];
+                bulletsUpdated = true;
+                return false;
+            } else {
+                const playerHit = this.checkBulletCollision(bullet);
+                if (playerHit) {
+                    this.ws.sendData('playerHit', {
+                        bulletId: bullet.id,
+                        playerId: playerHit.socketId,
+                        from: this.player.socketId,
+                        bulletCharge: bullet.bulletCharge
+                    });
+                    delete this.player.bullets[bullet.id];
+                    bulletsUpdated = true;
+                    return false;
+                } else {
+                    return true;
+                }
+            }
+        });
+        return bulletsUpdated;
+    }
+
+    checkBulletCollision(bullet) {
+        let collision = false;
+        let playerKilled;
+        for (const id in this.players) {
+            const player = this.players[id];
+            const playerRealDimension = player.getRealDimension();
+            if (player.socketId !== bullet.socketId) {
+                collision = bullet.x > playerRealDimension.x && bullet.x < playerRealDimension.x + playerRealDimension.width && bullet.y > playerRealDimension.y && bullet.y < playerRealDimension.y + playerRealDimension.height;
+                if (collision) {
+                    playerKilled = player;
+                    break;
+                }
+            }
+        }
+        return playerKilled;
+    }
+
+    /**
+     * Check collisions with other players
+     * 
+     * @returns 
+     */
+    checkCollisionsWithPlayers() {
+        const rect1 = this.player.getRealDimension();
+        let collision = false;
+
+        const cellSize = Math.max(rect1.width, rect1.height);
+        const playerXB = Math.floor(rect1.x / cellSize)
+        const playerYB = Math.floor(rect1.y / cellSize)
+        for (let id in this.players) {
+            const rect2 = this.players[id].getRealDimension();
+
+            if (this.players[id].isDead || this.players[id].socketId === this.player.socketId) {
+                continue;
+            }
+            const rect2XB = parseInt(rect2.x / cellSize)
+            const rect2YB = parseInt(rect2.y / cellSize)
+
+            // in same area
+            if (Math.abs(playerXB - rect2XB) <= 1 && Math.abs(playerYB - rect2YB) <= 1) {
+                collision = this.checkRectsCollision(rect1, rect2);
+                if (collision) break;
+            }
+        }
+        return collision;
+    }
+
+    checkRectsCollision(rect1, rect2) {
+        return (rect1.x < rect2.x + rect2.width &&
+            rect1.x + rect1.width > rect2.x &&
+            rect1.y < rect2.y + rect2.height &&
+            rect1.height + rect1.y > rect2.y);
+    }
+
+    checkArcRectCollision(arc, rect) {
+        return this.checkRectsCollision(rect, {
+            x: arc.x - (arc.radiusX || arc.radius),
+            y: arc.y - (arc.radiusY || arc.radius),
+            width: (arc.radiusX || arc.radius) * 2,
+            height: (arc.radiusY || arc.radius) * 2
+        });
+    }
+}
+
+export default Game;

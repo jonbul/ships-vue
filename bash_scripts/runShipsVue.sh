@@ -31,13 +31,13 @@ else
 fi
 # git checkout cleaning
 
-
-cp -f /home/jonbul/servers/files/.env /home/jonbul/servers/$CARPETA/.env
+cd
+cp -f ./servers/files/.env ./servers/$CARPETA/.env
 
 echo ____________________ NUEVO DOCKER
 docker build -t $IMAGE_NAME .
 
 
-docker run -d -p 5173:443 --name $CONTAINER_NAME -v /home/jonbul/servers/files/ssl:/ssl $IMAGE_NAME
+docker run -d -p 5173:443 --name $CONTAINER_NAME -v ./servers/files/ssl:/ssl $IMAGE_NAME
 
 docker ps -a

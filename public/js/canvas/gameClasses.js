@@ -30,6 +30,7 @@ class Player {
         this.hide = false;
         this.isDead = false;
         this.scale = 1;
+        this.socketId = null;
         const debugEnabled = (typeof localStorage !== 'undefined') && localStorage.getItem('debug');
         if (debugEnabled) {
             console.log(`Player ${this.name} created with ship ${this.ship.name}`);
@@ -205,6 +206,7 @@ class Player {
             hide: this.hide,
             isDead: this.isDead,
             scale: this.scale,
+            socketId: this.socketId,
             xTranslation: this.xTranslation,
             yTranslation: this.yTranslation
         }

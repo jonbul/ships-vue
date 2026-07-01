@@ -18,40 +18,40 @@ async function asyncRequest({ path, method, data, silent = false }) {
             'Content-Type': 'application/json;charset=UTF-8'
         },
         body: data && typeof data === "object" ? JSON.stringify(data) : data
-    }).then(response => {
+    }).then(async response => {
+        const resultText = await response.text();
         if (!response.ok) {
-            return response.text().then(text => {
-                let err;
-                if (response.status === 400) {
-                    err = 'Bad Request';
-                } else if (response.status === 401) {
-                    err = 'Unauthorized';
-                    localStorage.removeItem('user');
-                } else if (response.status === 403) {
-                    err = 'Forbidden';
-                } else if (response.status === 404) {
-                    err = 'Not Found';
-                } else if (response.status === 500) {
-                    err = 'Internal Server Error';
+            let err;
+            if (response.status === 400) {
+                err = 'Bad Request';
+            } else if (response.status === 401) {
+                err = 'Unauthorized';
+                localStorage.removeItem('user');
+            } else if (response.status === 403) {
+                err = 'Forbidden';
+            } else if (response.status === 404) {
+                err = 'Not Found';
+            } else if (response.status === 500) {
+                err = 'Internal Server Error';
+            }
+            err += `(${response.status})`;
+            if (!silent) showAlert({ type: ALERT_TYPES.DANGER, msg: err, title: 'Error' });
+            let errors = null;
+            try {
+                const parsedText = JSON.parse(resultText);
+                err += ": " + parsedText.errors;
+                if (parsedText) {
+                    errors = parsedText.errors;
                 }
-                err += `(${response.status})`;
-                if (!silent) showAlert({ type: ALERT_TYPES.DANGER, msg: err, title: 'Error' });
-                let errors = null;
-                try {
-                    const parsedText = JSON.parse(text);
-                    err += ": " + parsedText.errors;
-                    if (parsedText) {
-                        errors = parsedText.errors;
-                    }
-                } catch { if (text) err += `: ${text}`; }
-                console.error({ status: response.status, response: err, text, errors });
-                return null;
-            });
+            } catch { if (resultText) err += `: ${resultText}`; }
+            console.error({ status: response.status, response: err, resultText, errors });
+            return null;
         }
         if (method && method.toUpperCase() !== 'GET') {
             //showAlert({ type: ALERT_TYPES.SUCCESS, msg: 'Operation successful', title: 'Success' });
         }
-        return response.json().catch(() => response.text());
+        if (!resultText) return null;
+        return JSON.parse(resultText);
     });
 }
 

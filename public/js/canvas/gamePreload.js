@@ -29,7 +29,8 @@ canvas.height = gameData.canvasHeight
 let userShips = (await asyncRequest({ path: "./game/userShips" })).userShips;
 
 const res = await asyncRequest({ path: '/game/getShips' });
-const shipsManager = new ShipsManager(res);
+
+const shipsManager = new ShipsManager(userShips && res ? [...userShips, ...res] : res || userShips);
 
 if (!userShips.length) {
     userShips = shipsManager.getGenericShips();

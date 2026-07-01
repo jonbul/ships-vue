@@ -877,9 +877,10 @@ class PaintingBoard {
             return;
         }
         this.project.name = name;
+        const width = [null, ""].indexOf(this.menus.resolution.width.value) === -1 ? parseInt(this.menus.resolution.width.value) : 0;
+        const height = [null, ""].indexOf(this.menus.resolution.height.value) === -1 ? parseInt(this.menus.resolution.height.value) : 0;
         this.project.canvas = {
-            width: this.menus.resolution.width.value,
-            height: this.menus.resolution.height.value
+            width, height
         };
         const response = await asyncRequest({
             path: '/paintingBoard/save',

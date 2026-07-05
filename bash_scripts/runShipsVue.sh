@@ -3,8 +3,8 @@ set -x # show comands in execution
 
 #which docker
 docker ps -a
-CONTAINER_NAME="ships_vue-container"
-IMAGE_NAME="ships_vue-image"
+CONTAINER_NAME="ships-vue"
+IMAGE_NAME="ships-vue-image"
 
 
 echo "Usuario actual: $(whoami)"

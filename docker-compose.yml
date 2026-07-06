@@ -7,6 +7,8 @@ services:
     networks:
       - ships-network
     restart: unless-stopped
+    volumes:
+      - files/ssl:/etc/ssl
 
 networks:
   ships-network:

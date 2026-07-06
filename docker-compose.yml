@@ -1,0 +1,15 @@
+services:
+  ships-vue:
+    build: .
+    container_name: ships-vue
+    ports:
+      - "5173:443"
+    networks:
+      - ships-network
+    restart: unless-stopped
+    volumes:
+      - ../files/ssl:/ssl
+
+networks:
+  ships-network:
+    external: true

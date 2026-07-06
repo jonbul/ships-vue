@@ -23,6 +23,9 @@ fi
 
 cp -f /home/jonbul/servers/files/.env /home/jonbul/servers/$CARPETA/.env
 
+# create docker network if not exist
+docker network inspect ships-network >/dev/null 2>&1 || docker network create ships-network
+
 echo ____________________ NUEVO DOCKER
 docker compose up -d --build ships-vue
 

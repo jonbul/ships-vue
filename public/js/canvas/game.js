@@ -913,16 +913,22 @@ class Game {
         // 1 every 100ms
         if (Date.now() - (this.lastBulletTs || 0) <= 100) return;
         const bullet = this.player.createBullet();
-        const msg = this.player.getCenteredPosition();
+        const position = this.player.getCenteredPosition();
 
         const chargingTime = Math.ceil((Date.now() - this.bulletCharging) / 1000);
 
         const bulletCharge = Math.min(chargingTime, CHARGE_TIME) * (10 / CHARGE_TIME);
         bullet.bulletCharge = bulletCharge;
 
-        msg.bullet = bullet.getSortDetails(bulletCharge);
+        const bulletDetails = bullet.getSortDetails(bulletCharge);
 
         this.bulletCharging = null;
+
+        const msg = {
+            ...position,
+            ...bulletDetails,
+            socketId: this.player.socketId
+        }
 
         this.ws.sendData('newBullet', msg);
         this.lastBulletTs = Date.now()

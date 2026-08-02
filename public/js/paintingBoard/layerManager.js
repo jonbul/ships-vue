@@ -2,6 +2,8 @@ import CONST from '/js/utils/constants.js';
 import { Layer, Rect, ProjectShape } from '../canvas/canvasClasses.js';
 import { parseShape, parseLayer, showAlert, parseLayers } from '/js/utils/functions.js';
 
+const ALERT_TYPES = CONST.ALERT_TYPES;
+
 class LayerManager {
     constructor(paintingBoard) {
         this.paintingBoard = paintingBoard;
@@ -215,7 +217,7 @@ function layersManager_movingShape(shape, evt) {
         oldPos.y = shape.y;
     }
     this.paintingBoard.movingShape = { item: shape, oldPos: oldPos };
-    showAlert({ type: 'info', msg: 'Left click in canvas to move the shape. Right click to cancel.', duration: 5000 })
+    showAlert({ type: ALERT_TYPES.INFO, msg: 'Left click in canvas to move the shape. Right click to cancel.', duration: 5000 })
 }
 
 function hideLayerShapes(btn, layerShapesBlock) {
@@ -428,7 +430,7 @@ function deleteShape(shape, shapes, shapeBlock) {
 function paintShape(shape) {
     this.paintingBoard.selectedTool = CONST.PROJECT_SHAPE;
     this.paintingBoard.painting = { shape };
-    showAlert({ type: 'info', msg: 'Click on canvas to paint the shape. Right click to remove last tile.', duration: 5000 })
+    showAlert({ type: ALERT_TYPES.INFO, msg: 'Click on canvas to paint the shape. Right click to remove last tile.', duration: 5000 })
 }
 
 // endregion Shape events functions
@@ -531,7 +533,7 @@ function layersManagerMouseUp(evt) {
 function selectProjectShape(selectShapeToProject) {
     const project = selectShapeToProject.selectedOptions[0]?.project;
     if (!project) {
-        showAlert({ type: 'danger', msg: 'No project shape selected', duration: 5000 });
+        showAlert({ type: ALERT_TYPES.DANGER, msg: 'No project shape selected', duration: 5000 });
         return;
     }
 

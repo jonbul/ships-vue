@@ -17,6 +17,8 @@ import {
 } from '../canvas/canvasClasses.js';
 import LayerManager from './layerManager.js'
 
+const ALERT_TYPES = CONST.ALERT_TYPES;
+
 class PaintingBoard {
     constructor() {
         const canvas = document.getElementById('canvas');
@@ -484,7 +486,7 @@ class PaintingBoard {
         }
         const shape = this.painting.shape;
         if (!shape) {
-            showAlert({ type: 'danger', msg: 'No shape selected to paint' })
+            showAlert({ type: ALERT_TYPES.DANGER, msg: 'No shape selected to paint' })
             return;
         }
         shape.addedPoints = 1;
@@ -556,7 +558,7 @@ class PaintingBoard {
             if ((evt.buttons & CONST.MOUSE_KEYS_BUTTONS.LEFT) !== 0) {
                 const shape = this.painting.shape;
                 if (!shape) {
-                    showAlert({ type: 'danger', msg: 'No shape selected to paint' })
+                    showAlert({ type: ALERT_TYPES.DANGER, msg: 'No shape selected to paint' })
                     return;
                 }
                 if (!this.painting) {

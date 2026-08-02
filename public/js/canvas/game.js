@@ -13,7 +13,7 @@ import {
     Player
 } from './gameClasses.js';
 
-import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED } from '/js/utils/constants.js';
+import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED, ALERT_TYPES } from '/js/utils/constants.js';
 import { asyncRequest, showAlert } from '/js/utils/functions.js';
 import { Animation, getExplossionFrames } from './animationClass.js';
 import gameSounds from './gameSounds.js';
@@ -47,12 +47,29 @@ class Game {
         this.createStaticCanvas();
 
         // Wait for connection
-        this.ws = new WebSocket(websocketHost);
-        if (this.ws.readyState === WebSocket.CONNECTING) {
-            this.ws.addEventListener('open', this.onWebSocketOpen.bind(this));
-        } else if (this.ws.readyState === WebSocket.OPEN) {
-            this.onWebSocketOpen();
+        let tryCount = 0;
+        const connectWebSocket = () => {
+            try {
+                this.ws = new WebSocket(websocketHost);
+            } catch (error) {
+                console.error('WebSocket connection failed:', error);
+                if (tryCount < 5) {
+                    tryCount++;
+                    setTimeout(connectWebSocket, 200);
+                    showAlert({ msg: 'Failed to connect to WebSocket. Please reload the page.', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
+                } else {
+                    console.error('Failed to connect to WebSocket after 5 attempts');
+                    showAlert({ msg: 'Failed to connect to WebSocket. Please reload the page.', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 })
+                }
+                return;
+            }
+            if (this.ws.readyState === WebSocket.CONNECTING) {
+                this.ws.addEventListener('open', this.onWebSocketOpen.bind(this));
+            } else if (this.ws.readyState === WebSocket.OPEN) {
+                this.onWebSocketOpen();
+            }
         }
+        connectWebSocket();
     }
 
     async onWebSocketOpen() {
@@ -104,7 +121,7 @@ class Game {
         const tryConnect = () => {
             attempts++;
             console.log(`🔄 Reconnecting... Attempt ${attempts}`);
-            showAlert({ msg: `Reconnecting... Attempt ${attempts}`, title: 'Info', type: 'info', duration: 2000 });
+            showAlert({ msg: `Reconnecting... Attempt ${attempts}`, title: 'Info', type: ALERT_TYPES.INFO, duration: 2000 });
             this.ws = new WebSocket(websocketHost);
             this.ws.addEventListener('open', () => {
                 console.log('✅ Reconnected. Reloading...');
@@ -115,7 +132,7 @@ class Game {
                     setTimeout(tryConnect, DELAY_MS);
                 } else {
                     console.error('❌ All reconnection attempts failed');
-                    showAlert({ msg: 'Failed to reconnect. Please reload the page.', title: 'Error', type: 'danger', duration: 5000 });
+                    showAlert({ msg: 'Failed to reconnect. Please reload the page.', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
                 }
             });
         };
@@ -198,12 +215,12 @@ class Game {
         // ✅ Manage connection events
         this.ws.on('connect_error', (error) => {
             console.error('❌ Connection error:', error.message);
-            showAlert({ msg: 'Connection error. Reconnecting...', title: 'Error', type: 'danger', duration: 5000 });
+            showAlert({ msg: 'Connection error. Reconnecting...', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
         });
 
         this.ws.on('connect_timeout', () => {
             console.error('⏱️ Connection timeout');
-            showAlert({ msg: 'Connection timeout', title: 'Error', type: 'danger', duration: 5000 });
+            showAlert({ msg: 'Connection timeout', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
             location.reload();
         });
 

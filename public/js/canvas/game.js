@@ -20,7 +20,7 @@ import gameSounds from './gameSounds.js';
 import MessagesManager from './messagesManagerClass.js';
 
 const backendHost = (window.location.host.substring(0, window.location.host.indexOf(':')) || window.location.host) + ':3000';
-const websocketHost = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + backendHost;
+const websocketHost = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + backendHost + '/ws';
 
 class Game {
     constructor(canvas, username, credits, isSmartphone, ship, shipsManager) {
@@ -173,21 +173,26 @@ class Game {
         });
         this.ws.on('sendHome', () => location.href = '/');
         this.ws.on('getBackgroundCards', data => {
-            data.cards.forEach(card => {
-                const shapes = [];
-                card[2].forEach(point => {
-                    shapes.push(new Arc(
-                        point[0] + card[0] * this.canvas.width,
-                        point[1] + card[1] * this.canvas.height,
-                        point[2],
-                        '#ffffff'
-                    ))
-                })
-                this.backgroundCards[card[0]][card[1]] = new Layer(
-                    `${card[0]},${card[1]}`,
-                    shapes
-                )
-            })
+
+            for (const x in data.cards) {
+                const conX = parseInt(x);
+                for (const y in data.cards[x]) {
+                    const shapes = [];
+                    const conY = parseInt(y);
+                    data.cards[x][y].stars.forEach(star => {
+                        shapes.push(new Arc(
+                            star.x + conX * this.canvas.width,
+                            star.y + conY * this.canvas.height,
+                            star.r,
+                            '#ffffff'
+                        ))
+                    })
+                    this.backgroundCards[conX][conY] = new Layer(
+                        `${conX},${conY}`,
+                        shapes
+                    )
+                }
+            }
         })
 
         // ✅ Manage connection events
@@ -510,16 +515,17 @@ class Game {
     updatePlayers(plDetails) {
         const players = this.players;
         if (plDetails) {
-            if (!players[plDetails.socketId]) {
-                players[plDetails.socketId] = new Player(this.shipsManager.getShipById(plDetails.shipId), plDetails.name, plDetails.shipId);
-                players[plDetails.socketId].socketId = plDetails.socketId;
+            const socketId = plDetails.socketId;
+            if (!players[socketId]) {
+                players[socketId] = new Player(this.shipsManager.getShipById(plDetails.shipId), plDetails.name, plDetails.shipId);
+                players[socketId].socketId = socketId;
             }
-            players[plDetails.socketId].x = plDetails.x;
-            players[plDetails.socketId].y = plDetails.y;
-            players[plDetails.socketId].rotate = plDetails.rotate;
-            players[plDetails.socketId].hide = plDetails.hide;
-            players[plDetails.socketId].isDead = plDetails.isDead;
-            players[plDetails.socketId].credits = plDetails.credits;
+            players[socketId].x = plDetails.x;
+            players[socketId].y = plDetails.y;
+            players[socketId].rotate = plDetails.rotate;
+            players[socketId].hide = plDetails.hide;
+            players[socketId].isDead = plDetails.isDead;
+            players[socketId].credits = plDetails.credits;
         }
     }
 
@@ -611,7 +617,7 @@ class Game {
 
         if (data.length && !this.requestingBackgroundCards && this.socketId) {
             this.requestingBackgroundCards = true;
-            this.ws.sendData('getBackgroundCards', { socketId: this.socketId, data });
+            this.ws.sendData('getBackgroundCards', { socketId: this.socketId });
         }
 
         if (!this.background) {

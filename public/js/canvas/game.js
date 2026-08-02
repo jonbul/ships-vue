@@ -13,14 +13,14 @@ import {
     Player
 } from './gameClasses.js';
 
-import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED } from '/js/utils/constants.js';
+import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED, ALERT_TYPES } from '/js/utils/constants.js';
 import { asyncRequest, showAlert } from '/js/utils/functions.js';
 import { Animation, getExplossionFrames } from './animationClass.js';
 import gameSounds from './gameSounds.js';
 import MessagesManager from './messagesManagerClass.js';
 
 const backendHost = (window.location.host.substring(0, window.location.host.indexOf(':')) || window.location.host) + ':3000';
-const websocketHost = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + backendHost;
+const websocketHost = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + backendHost + '/ws';
 
 class Game {
     constructor(canvas, username, credits, isSmartphone, ship, shipsManager) {
@@ -47,12 +47,29 @@ class Game {
         this.createStaticCanvas();
 
         // Wait for connection
-        this.ws = new WebSocket(websocketHost);
-        if (this.ws.readyState === WebSocket.CONNECTING) {
-            this.ws.addEventListener('open', this.onWebSocketOpen.bind(this));
-        } else if (this.ws.readyState === WebSocket.OPEN) {
-            this.onWebSocketOpen();
+        let tryCount = 0;
+        const connectWebSocket = () => {
+            try {
+                this.ws = new WebSocket(websocketHost);
+            } catch (error) {
+                console.error('WebSocket connection failed:', error);
+                if (tryCount < 5) {
+                    tryCount++;
+                    setTimeout(connectWebSocket, 200);
+                    showAlert({ msg: 'Failed to connect to WebSocket. Please reload the page.', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
+                } else {
+                    console.error('Failed to connect to WebSocket after 5 attempts');
+                    showAlert({ msg: 'Failed to connect to WebSocket. Please reload the page.', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 })
+                }
+                return;
+            }
+            if (this.ws.readyState === WebSocket.CONNECTING) {
+                this.ws.addEventListener('open', this.onWebSocketOpen.bind(this));
+            } else if (this.ws.readyState === WebSocket.OPEN) {
+                this.onWebSocketOpen();
+            }
         }
+        connectWebSocket();
     }
 
     async onWebSocketOpen() {
@@ -104,7 +121,7 @@ class Game {
         const tryConnect = () => {
             attempts++;
             console.log(`🔄 Reconnecting... Attempt ${attempts}`);
-            showAlert({ msg: `Reconnecting... Attempt ${attempts}`, title: 'Info', type: 'info', duration: 2000 });
+            showAlert({ msg: `Reconnecting... Attempt ${attempts}`, title: 'Info', type: ALERT_TYPES.INFO, duration: 2000 });
             this.ws = new WebSocket(websocketHost);
             this.ws.addEventListener('open', () => {
                 console.log('✅ Reconnected. Reloading...');
@@ -115,7 +132,7 @@ class Game {
                     setTimeout(tryConnect, DELAY_MS);
                 } else {
                     console.error('❌ All reconnection attempts failed');
-                    showAlert({ msg: 'Failed to reconnect. Please reload the page.', title: 'Error', type: 'danger', duration: 5000 });
+                    showAlert({ msg: 'Failed to reconnect. Please reload the page.', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
                 }
             });
         };
@@ -173,32 +190,37 @@ class Game {
         });
         this.ws.on('sendHome', () => location.href = '/');
         this.ws.on('getBackgroundCards', data => {
-            data.cards.forEach(card => {
-                const shapes = [];
-                card[2].forEach(point => {
-                    shapes.push(new Arc(
-                        point[0] + card[0] * this.canvas.width,
-                        point[1] + card[1] * this.canvas.height,
-                        point[2],
-                        '#ffffff'
-                    ))
-                })
-                this.backgroundCards[card[0]][card[1]] = new Layer(
-                    `${card[0]},${card[1]}`,
-                    shapes
-                )
-            })
+
+            for (const x in data.cards) {
+                const conX = parseInt(x);
+                for (const y in data.cards[x]) {
+                    const shapes = [];
+                    const conY = parseInt(y);
+                    data.cards[x][y].stars.forEach(star => {
+                        shapes.push(new Arc(
+                            star.x + conX * this.canvas.width,
+                            star.y + conY * this.canvas.height,
+                            star.r,
+                            '#ffffff'
+                        ))
+                    })
+                    this.backgroundCards[conX][conY] = new Layer(
+                        `${conX},${conY}`,
+                        shapes
+                    )
+                }
+            }
         })
 
         // ✅ Manage connection events
         this.ws.on('connect_error', (error) => {
             console.error('❌ Connection error:', error.message);
-            showAlert({ msg: 'Connection error. Reconnecting...', title: 'Error', type: 'danger', duration: 5000 });
+            showAlert({ msg: 'Connection error. Reconnecting...', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
         });
 
         this.ws.on('connect_timeout', () => {
             console.error('⏱️ Connection timeout');
-            showAlert({ msg: 'Connection timeout', title: 'Error', type: 'danger', duration: 5000 });
+            showAlert({ msg: 'Connection timeout', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
             location.reload();
         });
 
@@ -510,16 +532,17 @@ class Game {
     updatePlayers(plDetails) {
         const players = this.players;
         if (plDetails) {
-            if (!players[plDetails.socketId]) {
-                players[plDetails.socketId] = new Player(this.shipsManager.getShipById(plDetails.shipId), plDetails.name, plDetails.shipId);
-                players[plDetails.socketId].socketId = plDetails.socketId;
+            const socketId = plDetails.socketId;
+            if (!players[socketId]) {
+                players[socketId] = new Player(this.shipsManager.getShipById(plDetails.shipId), plDetails.name, plDetails.shipId);
+                players[socketId].socketId = socketId;
             }
-            players[plDetails.socketId].x = plDetails.x;
-            players[plDetails.socketId].y = plDetails.y;
-            players[plDetails.socketId].rotate = plDetails.rotate;
-            players[plDetails.socketId].hide = plDetails.hide;
-            players[plDetails.socketId].isDead = plDetails.isDead;
-            players[plDetails.socketId].credits = plDetails.credits;
+            players[socketId].x = plDetails.x;
+            players[socketId].y = plDetails.y;
+            players[socketId].rotate = plDetails.rotate;
+            players[socketId].hide = plDetails.hide;
+            players[socketId].isDead = plDetails.isDead;
+            players[socketId].credits = plDetails.credits;
         }
     }
 
@@ -611,7 +634,7 @@ class Game {
 
         if (data.length && !this.requestingBackgroundCards && this.socketId) {
             this.requestingBackgroundCards = true;
-            this.ws.sendData('getBackgroundCards', { socketId: this.socketId, data });
+            this.ws.sendData('getBackgroundCards', { socketId: this.socketId });
         }
 
         if (!this.background) {
@@ -907,16 +930,22 @@ class Game {
         // 1 every 100ms
         if (Date.now() - (this.lastBulletTs || 0) <= 100) return;
         const bullet = this.player.createBullet();
-        const msg = this.player.getCenteredPosition();
+        const position = this.player.getCenteredPosition();
 
         const chargingTime = Math.ceil((Date.now() - this.bulletCharging) / 1000);
 
         const bulletCharge = Math.min(chargingTime, CHARGE_TIME) * (10 / CHARGE_TIME);
         bullet.bulletCharge = bulletCharge;
 
-        msg.bullet = bullet.getSortDetails(bulletCharge);
+        const bulletDetails = bullet.getSortDetails(bulletCharge);
 
         this.bulletCharging = null;
+
+        const msg = {
+            ...position,
+            ...bulletDetails,
+            socketId: this.player.socketId
+        }
 
         this.ws.sendData('newBullet', msg);
         this.lastBulletTs = Date.now()

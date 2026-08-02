@@ -55,7 +55,7 @@ async function asyncRequest({ path, method, data, silent = false }) {
     });
 }
 
-function showAlert({ type = 'danger', msg, title, duration = 3000 }) {
+function showAlert({ type = ALERT_TYPES.DANGER, msg, title, duration = 3000 }) {
     const validTypes = ['primary', 'secondary', 'success', 'danger', 'warning', 'info', 'light', 'dark'];
     if (validTypes.indexOf(type) === -1) {
         console.warn('Valid types are:', validTypes);
@@ -139,7 +139,7 @@ function parseShape(shape) {
             newShape.srcError = true;
             console.warn('Error loading image:', newShape.src);
             if (location.pathname.indexOf('paintingBoard') > 0) {
-                showAlert({ type: 'warning', msg: 'Error loading given Picture. Try to reload it from a different source.', title: 'Warning' });
+                showAlert({ type: ALERT_TYPES.WARNING, msg: 'Error loading given Picture. Try to reload it from a different source.', title: 'Warning' });
             }
         }
         img.src = newShape.src;

@@ -1,4 +1,6 @@
 import { showAlert, asyncRequest } from '/js/utils/functions.js';
+import { ALERT_TYPES } from '/js/utils/constants.js';
+
 document.getElementById('btnLogin').addEventListener('click', function (event) {
     event.preventDefault(); // Prevent the default form submission
 
@@ -6,7 +8,7 @@ document.getElementById('btnLogin').addEventListener('click', function (event) {
     const password = document.getElementById('inputPassword').value;
     const rememberMe = document.getElementById('rememberMe').checked;
     if (!email || !password) {
-        showAlert({ type: 'warning', title: 'Warning', msg: 'Please enter both email and password' });
+        showAlert({ type: ALERT_TYPES.WARNING, title: 'Warning', msg: 'Please enter both email and password' });
         return;
     }
 
@@ -26,11 +28,11 @@ document.getElementById('btnLogin').addEventListener('click', function (event) {
                 window.location.href = '/'; // Redirect to home
             } else {
                 // Handle login failure (e.g., display error message)
-                showAlert({ type: 'danger', title: 'Error', msg: data.error || 'Login failed' });
+                showAlert({ type: ALERT_TYPES.DANGER, title: 'Error', msg: data.error || 'Login failed' });
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            showAlert({ type: 'danger', title: 'Error', msg: 'An error occurred during login' });
+            showAlert({ type: ALERT_TYPES.DANGER, title: 'Error', msg: 'An error occurred during login' });
         });
 });

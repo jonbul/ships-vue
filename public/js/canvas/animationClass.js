@@ -125,8 +125,8 @@ function getBlackHoleAnimation(x, y, r) {
     const ellipseStart = degToRad(130);
     const ellipseEnd = degToRad(50);
 
-    const ellBorder = new Ellipse(0, 0, ellipseRx + d * 5, ellipseRy + d * 5, ellipseRotation, transparent, shadow, d * 15, ellipseStart, ellipseEnd);
-    const ellBg = new Ellipse(0, 0, ellipseRx + d * 8, ellipseRy + d * 8, ellipseRotation, black);
+    const ellBorder = new Ellipse(0, 0, ellipseRx + d * 5, ellipseRy + d * 5, ellipseRotation, transparent, shadow, d * 15, degToRad(128), degToRad(52));
+    const ellBg = new Ellipse(0, 0, ellipseRx + d * 8, ellipseRy + d * 8, ellipseRotation, black, null, null, degToRad(160), degToRad(20));
 
     const sizes = [0, d, -d];
     let i = 0;
@@ -143,7 +143,7 @@ function getBlackHoleAnimation(x, y, r) {
         }
     }
 
-    const shapes = [arcBg, ellBg, ...arcsToEdit, ...ellipsesToEdit, arcBorder, ellBorder];
+    const shapes = [arcBg, ...arcsToEdit, arcBorder, ellBg, ...ellipsesToEdit, ellBorder];
     const layer = new Layer('', shapes);
 
     const totalFrames = 10;

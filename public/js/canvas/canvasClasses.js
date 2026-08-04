@@ -435,20 +435,6 @@ class Polygon {
             context.rotate(-this.rotation);
             context.translate(-rotationXmove, -rotationYmove);
         }
-        /* // Missing alternative
-        const minX = Math.min(...this.points.map(p => p.x));
-        const minY = Math.min(...this.points.map(p => p.y));
-        const maxX = Math.max(...this.points.map(p => p.x));
-        const maxY = Math.max(...this.points.map(p => p.y));
-        const range = Math.max(maxX - minX, maxY - minY);
-        const scale = resizeSize / range;
-
-        context.save();
-        context.scale(scale, scale);
-        context.translate(-minX, -minY); // mueve el polígono al origen (0,0)
-        this.draw(context, options);
-        context.restore();
-        */
     }
 }
 

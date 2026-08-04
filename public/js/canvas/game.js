@@ -15,7 +15,7 @@ import {
 
 import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED, ALERT_TYPES } from '/js/utils/constants.js';
 import { asyncRequest, showAlert } from '/js/utils/functions.js';
-import { Animation, getExplossionFrames } from './animationClass.js';
+import { getExplossionAnimation, getBlackHoleAnimation } from './animationClass.js';
 import gameSounds from './gameSounds.js';
 import MessagesManager from './messagesManagerClass.js';
 
@@ -72,6 +72,13 @@ class Game {
         connectWebSocket();
     }
 
+    runBlackHole(x, y, r = 100) {
+        const bh = getBlackHoleAnimation(x, y, r);
+        this.animations = this.animations || [];
+        this.animations.push(bh);
+        bh.play();
+    }
+
     async onWebSocketOpen() {
         const tempPlayers = (await asyncRequest({ path: '/game/getPlayers', method: 'GET' }));
         for (const id in tempPlayers) {
@@ -99,6 +106,8 @@ class Game {
 
         this.messagesManager = new MessagesManager(this);
         this.socketIOEvents();
+
+        //this.runBlackHole(this.player.x, this.player.y, 300);
     }
 
     reloadPlayer() {
@@ -301,16 +310,13 @@ class Game {
         this.players[msg.from].kills++;
         this.players[msg.playerId].calculateScale();
         this.players[msg.from].calculateScale();
-        const explossionFrames = getExplossionFrames();
         const playerRealDimension = this.players[msg.playerId].getRealDimension();
-        const explossion = new Animation({
-            frames: explossionFrames.frames,
-            layer: explossionFrames.layer,
-            x: playerRealDimension.x + playerRealDimension.width / 2,
-            y: playerRealDimension.y + playerRealDimension.height / 2,
-            width: 100,
-            height: 100
-        });
+        const explossion = getExplossionAnimation(
+            playerRealDimension.x + playerRealDimension.width / 2,
+            playerRealDimension.y + playerRealDimension.height / 2,
+            100,
+            100
+        );
         this.animations.push(explossion);
         explossion.play();
         gameSounds.explosion();
@@ -507,6 +513,13 @@ class Game {
         data.bulletsToRemove.forEach(bulletId => {
             delete this.bullets[bulletId];
         });
+
+        for (const idp in this.players) {
+            if (!data.activePlayerIds.includes(idp)) {
+                delete this.players[idp];
+            }
+        }
+
     }
 
     comingNewBullets(newBullets) {

@@ -18,7 +18,7 @@ class LayerManager {
 
         document.body.addEventListener('mouseup', layersManagerMouseUp.bind(this));
         document.body.addEventListener('mousemove', layersManagerMouseMove.bind(this));
-        this.layersManagerDiv.addEventListener('mouseleave', layersManagerMouseUp.bind(this));
+        //this.layersManagerDiv.addEventListener('mouseleave', layersManagerMouseUp.bind(this));
         document.getElementById("btnAddLayer").addEventListener('click', this.addNewLayer.bind(this));
         this.shapePropertiesTable.addEventListener('input', editShapeProperty.bind(this));
         document.querySelectorAll('.window .closeButton').forEach(btn => {
@@ -438,7 +438,7 @@ function paintShape(shape) {
 function layersManager_layerShapeMousedown(item, div, evt) {
     if (evt.button !== CONST.MOUSE_KEYS.LEFT) return;
 
-    this.movingItem = { item, div };
+    this.movingItem = { item, div, previousParent: div.parentElement, previousNextSibling: div.nextSibling };
 
     div.previousParent = div.parentElement;
     div.previousNextSibling = div.nextSibling;
@@ -451,82 +451,129 @@ function layersManager_layerShapeMousedown(item, div, evt) {
 }
 
 function layersManagerMouseUp(evt) {
+    const paintingBoard = this.paintingBoard;
     const movingItem = this.movingItem;
     this.movingItem = undefined;
     if (!movingItem) return;
     const movingDiv = movingItem.div;
+    const previousParent = movingItem.previousParent;
+    const previousNextSibling = movingItem.previousNextSibling;
+
+    evt.preventDefault();
+    evt.stopPropagation();
 
     const layersManager = this.layersManagerDiv;
 
-    if (movingItem) {
-        movingDiv.classList.remove("moving");
+    movingDiv.classList.remove("moving");
+    if (movingDiv.classList.contains("layersManager_shapes_head")) { // is a Shape
 
         let overElem = evt.target;
-        try {
-            const classToFind = movingDiv.className;
-            let forceExit = false;
-            while (!overElem.classList.contains(classToFind)
-                && overElem !== layersManager && !forceExit) {
-
-                if (overElem === document.body) {
-                    forceExit = true;
-                    overElem = layersManager;
-                    break;
-                } else if (classToFind === "layersManager_shapes_head") {
-                    if (overElem.className === "layersManager_layer_shapes") {
-                        forceExit = true;
-                    } else {
-                        overElem = overElem.parentElement;
-                    }
-                } else {
-                    overElem = overElem.parentElement;
-                }
+        let tempParent = overElem;
+        let stop = false;
+        let validDropTarget = false;
+        while (!stop) {
+            if (tempParent.classList.contains("layersManager_shapes_head") ||
+                tempParent.classList.contains("layersManager_layer_shapes") ||
+                tempParent.classList.contains("layersManager_layer_head") ||
+                tempParent.classList.contains("layersManager_layer")) {
+                validDropTarget = true;
+                stop = true;
+            } else if (tempParent === layersManager || tempParent === document.body || !tempParent) {
+                stop = true;
+            } else {
+                tempParent = tempParent.parentElement;
             }
-        } catch {
-            overElem = layersManager;
         }
-        if (overElem === layersManager) {
+
+        if (!validDropTarget) {
             if (movingDiv.previousNextSibling) {
                 const previousNextSibling = movingDiv.previousNextSibling;
                 previousNextSibling.parentElement.insertBefore(movingDiv, previousNextSibling)
             } else {
                 movingDiv.previousParent.appendChild(movingDiv)
             }
-        } else if (overElem.classList.contains("layersManager_layer_shapes")) {
-            if (!overElem.childElementCount) {
-                overElem.appendChild(movingDiv)
-            } else {
-                overElem.insertBefore(movingDiv, overElem.firstElementChild)
-            }
-        } else {
-            overElem.parentElement.insertBefore(movingDiv, overElem)
+            return;
         }
-        if (movingDiv.shape) { // is a shape
-            if (movingDiv.layer !== overElem.layer) {
-                movingDiv.layer.shapes.splice(movingDiv.layer.shapes.indexOf(movingDiv.shape), 1);
-                const overIndex = overElem.layer.shapes.indexOf(overElem.shape);
-                if (overIndex === -1) {
-                    overElem.layer.shapes.push(movingDiv.shape)
+
+        overElem = tempParent;
+
+        if (overElem.classList.contains("layersManager_shapes_head") ||
+            overElem.classList.contains("layersManager_layer_shapes") ||
+            overElem.classList.contains("layersManager_layer_head") ||
+            overElem.classList.contains("layersManager_layer")) { // valid drop targets
+
+            if (overElem.classList.contains("layersManager_layer_head")) {
+                overElem = overElem.parentElement; // next if will pick it up
+            }
+            if (overElem.classList.contains("layersManager_layer")) {
+                overElem = overElem.querySelector(".layersManager_layer_shapes");
+            }
+            if (overElem.classList.contains("layersManager_layer_shapes")) {
+                if (overElem.firstElementChild) {
+                    overElem.insertBefore(movingDiv, overElem.firstElementChild);
                 } else {
-                    overElem.layer.shapes.splice(overIndex, 0, movingDiv.shape)
+                    overElem.appendChild(movingDiv);
                 }
-                console.log(this.layers);
-            } else {
-                // same layer, just reorder
-                if (movingDiv.shape !== overElem.shape) {
-                    movingDiv.layer.shapes.splice(movingDiv.layer.shapes.indexOf(movingDiv.shape), 1);
-                    const overIndex = movingDiv.layer.shapes.indexOf(overElem.shape);
-                    movingDiv.layer.shapes.splice(overIndex, 0, movingDiv.shape)
-                    console.log(this.layers);
-                }
+
+                // remove from previous layer, could be the same layer but is removed using previous parent in case the layer has changed
+                previousParent.parentElement.layer.shapes.splice(previousParent.parentElement.layer.shapes.indexOf(movingDiv.shape), 1);
+                overElem.parentElement.layer.shapes.push(movingDiv.shape);
             }
-        } else { // is a layer
-            if (overElem.layer !== movingDiv.layer) {
-                this.layers.splice(this.layers.indexOf(movingDiv.layer), 1);
-                const overIndex = this.layers.indexOf(overElem.layer);
-                this.layers.splice(overIndex, 0, movingDiv.layer)
+            if (overElem.classList.contains("layersManager_shapes_head")) {
+                overElem.parentElement.insertBefore(movingDiv, overElem);
+                const overIndex = overElem.layer.shapes.indexOf(overElem.shape);
+
+                // remove from previous layer, could be the same layer but is removed using previous parent in case the layer has changed
+                previousParent.parentElement.layer.shapes.splice(previousParent.parentElement.layer.shapes.indexOf(movingDiv.shape), 1);
+
+                overElem.parentElement.parentElement.layer.shapes.splice(overIndex, 0, movingDiv.shape);
+            }
+
+
+            console.log(overElem.parentElement.parentElement.layer);
+        } else {
+            movingDiv.classList.remove("moving");
+            if (movingDiv.previousNextSibling) {
+                const previousNextSibling = movingDiv.previousNextSibling;
+                previousNextSibling.parentElement.insertBefore(movingDiv, previousNextSibling)
+            } else {
+                movingDiv.previousParent.appendChild(movingDiv)
+            }
+            return;
+        }
+        return;
+    } else if (movingDiv.classList.contains("layersManager_layer")) { // is a Layer
+        let overElem = evt.target;
+        let tempParent = overElem;
+        let stop = false;
+        let validDropTarget = false;
+        while (!stop) {
+            if (tempParent.classList.contains("layersManager_layer")) {
+                validDropTarget = true;
+                stop = true;
+            } else if (tempParent === layersManager || tempParent === document.body || !tempParent) {
+                stop = true;
+            } else {
+                tempParent = tempParent.parentElement;
             }
         }
+
+        if (!validDropTarget) {
+            if (movingDiv.previousNextSibling) {
+                const previousNextSibling = movingDiv.previousNextSibling;
+                previousNextSibling.parentElement.insertBefore(movingDiv, previousNextSibling)
+            } else {
+                movingDiv.previousParent.appendChild(movingDiv)
+            }
+            return;
+        }
+        overElem = tempParent;
+
+        overElem.parentElement.insertBefore(movingDiv, overElem);
+        this.layers.splice(this.layers.indexOf(movingDiv.layer), 1);
+        const overIndex = this.layers.indexOf(overElem.layer);
+        this.layers.splice(overIndex, 0, movingDiv.layer);
+        return;
     }
 }
 

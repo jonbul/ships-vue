@@ -1,5 +1,10 @@
 CHANGES
 =======
+Version 1.1.0 - 2026-XX-XX
+------------------
+- Black hole
+- Select ship in canvas
+
 2026-08-02 -> 1.0.0
 --------------------------------
 * Adapted to back refactoring for first version

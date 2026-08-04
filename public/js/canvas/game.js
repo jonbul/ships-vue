@@ -513,6 +513,13 @@ class Game {
         data.bulletsToRemove.forEach(bulletId => {
             delete this.bullets[bulletId];
         });
+
+        for (const idp in this.players) {
+            if (!data.activePlayerIds.includes(idp)) {
+                delete this.players[idp];
+            }
+        }
+
     }
 
     comingNewBullets(newBullets) {

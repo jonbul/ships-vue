@@ -1,9 +1,9 @@
 CHANGES
 =======
-Version 1.1.0 - 2026-XX-XX
+Version 1.0.1 - 2026-08-04
 ------------------
-- Black hole
-- Select ship in canvas
+- Black hole animation only
+- Fixing ghost
 
 2026-08-02 -> 1.0.0
 --------------------------------

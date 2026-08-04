@@ -107,7 +107,7 @@ class Game {
         this.messagesManager = new MessagesManager(this);
         this.socketIOEvents();
 
-        this.runBlackHole(this.player.x, this.player.y, 300);
+        //this.runBlackHole(this.player.x, this.player.y, 300);
     }
 
     reloadPlayer() {

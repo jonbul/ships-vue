@@ -15,7 +15,7 @@ import {
 
 import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED, ALERT_TYPES } from '/js/utils/constants.js';
 import { asyncRequest, showAlert } from '/js/utils/functions.js';
-import { getExplossionAnimation, getBlackHoleAnimation } from './animationClass.js';
+import { getExplossionAnimation, getBlackHoleAnimations, getBlackHoleAnimationBase } from './animationClass.js';
 import gameSounds from './gameSounds.js';
 import MessagesManager from './messagesManagerClass.js';
 
@@ -35,6 +35,7 @@ class Game {
         this.ship = ship;
         this.backgroundCards = [];
         this.players = {};
+        this.NPCs = [];
         this.bullets = {};
         this.keys = [];
         this.shipsManager = shipsManager;
@@ -73,7 +74,7 @@ class Game {
     }
 
     runBlackHole(x, y, r = 100) {
-        const bh = getBlackHoleAnimation(x, y, r);
+        const bh = getBlackHoleAnimationBase(x, y, r);
         this.animations = this.animations || [];
         this.animations.push(bh);
         bh.play();
@@ -97,8 +98,7 @@ class Game {
         this.drawableBullets = new Layer('bullets');
         this.drawablePlayers = [];
         do {
-            this.player.x = parseInt(Math.random() * this.canvas.width - this.player.width);
-            this.player.y = parseInt(Math.random() * this.canvas.height - this.player.height);
+            this.player.setPosition(parseInt(Math.random() * this.canvas.width - this.player.width), parseInt(Math.random() * this.canvas.height - this.player.height));
         } while (this.checkCollisionsWithPlayers());
         const tX = this.canvas.width / 2 - this.player.width / 2 - this.player.x;
         const tY = this.canvas.height / 2 - this.player.height / 2 - this.player.y;
@@ -115,8 +115,7 @@ class Game {
         const y = this.player.y;
 
         do {
-            this.player.x = parseInt(Math.random() * this.canvas.width - this.player.width);
-            this.player.y = parseInt(Math.random() * this.canvas.height - this.player.height);
+            this.player.setPosition(parseInt(Math.random() * this.canvas.width - this.player.width), parseInt(Math.random() * this.canvas.height - this.player.height));
         } while (this.checkCollisionsWithPlayers());
 
         this.context.translate(x - this.player.x, y - this.player.y);
@@ -208,7 +207,7 @@ class Game {
                     data.cards[x][y].stars.forEach(star => {
                         shapes.push(new Arc(
                             star.x + conX * this.canvas.width,
-                            star.y + conY * this.canvas.height,
+                            star.y + conY * this.canvas.width,
                             star.r,
                             '#ffffff'
                         ))
@@ -318,6 +317,12 @@ class Game {
             100
         );
         this.animations.push(explossion);
+        explossion.onEnd = () => {
+            const index = this.animations.indexOf(explossion);
+            if (index !== -1) {
+                this.animations.splice(index, 1);
+            }
+        }
         explossion.play();
         gameSounds.explosion();
 
@@ -422,15 +427,13 @@ class Game {
         player.x += moveX;
         player.y += moveY;
 
-        player.x = Math.round(player.x * 100) / 100;
-        player.y = Math.round(player.y * 100) / 100;
+        player.setPosition(Math.round(player.x * 100) / 100, Math.round(player.y * 100) / 100);
 
         if (player.speed || this.keys[KEYS.LEFT] || this.keys[KEYS.RIGHT]) {
             if (!this.checkCollisionsWithPlayers()) {
                 this.context.translate(-moveX, -moveY);
             } else {
-                player.x = tempPosition.x;
-                player.y = tempPosition.y;
+                player.setPosition(tempPosition.x, tempPosition.y);
             }
         }
     }
@@ -480,18 +483,13 @@ class Game {
                 break;
         }
 
-        player.x += moveX;
-        player.y += moveY;
-
-        player.x = Math.round(player.x * 100) / 100;
-        player.y = Math.round(player.y * 100) / 100;
+        player.setPosition(Math.round((player.x + moveX) * 100) / 100, Math.round((player.y + moveY) * 100) / 100);
 
         if (player.speed || this.keys[KEYS.LEFT] || this.keys[KEYS.RIGHT]) {
             if (!this.checkCollisionsWithPlayers()) {
                 this.context.translate(-moveX, -moveY);
             } else {
-                player.x = tempPosition.x;
-                player.y = tempPosition.y;
+                player.setPosition(tempPosition.x, tempPosition.y);
             }
         }
     }
@@ -518,6 +516,29 @@ class Game {
             if (!data.activePlayerIds.includes(idp)) {
                 delete this.players[idp];
             }
+        }
+
+        if (data.blackHole) {
+            console.log('Black hole event received:', data.blackHole);
+            const blackHoleData = data.blackHole;
+
+            const [flashAnimation, bhAnimation] = getBlackHoleAnimations(blackHoleData.x, blackHoleData.y, blackHoleData.maxSize / 2, blackHoleData.duration * 1000);
+            this.animations.push(flashAnimation);
+            this.animations.push(bhAnimation);
+            bhAnimation.onEnd = () => {
+                console.log('Black hole animation ended, removing from animations and NPCs');
+                this.NPCs = this.NPCs.filter(npc => npc !== blackHole);
+                const index = this.animations.indexOf(bhAnimation);
+                if (index !== -1) {
+                    this.animations.splice(index, 1);
+                }
+            }
+
+            const blackHole = new Player(null, null, null, blackHoleData.x, blackHoleData.y, null, bhAnimation);
+            blackHole.setPosition(blackHoleData.x, blackHoleData.y);
+            this.NPCs.push(blackHole);
+            bhAnimation.play();
+            flashAnimation.play();
         }
 
     }
@@ -550,8 +571,7 @@ class Game {
                 players[socketId] = new Player(this.shipsManager.getShipById(plDetails.shipId), plDetails.name, plDetails.shipId);
                 players[socketId].socketId = socketId;
             }
-            players[socketId].x = plDetails.x;
-            players[socketId].y = plDetails.y;
+            players[socketId].setPosition(plDetails.x, plDetails.y);
             players[socketId].rotate = plDetails.rotate;
             players[socketId].hide = plDetails.hide;
             players[socketId].isDead = plDetails.isDead;
@@ -624,10 +644,11 @@ class Game {
 
     drawBackground() {
         const playerRealDimension = this.player.getRealDimension();
+        const cardSize = this.canvas.width;
         // Math.floor maneja correctamente coordenadas negativas
         const currentCard = {
-            x: Math.floor(playerRealDimension.x / this.canvas.width),
-            y: Math.floor(playerRealDimension.y / this.canvas.height)
+            x: Math.floor(playerRealDimension.x / cardSize),
+            y: Math.floor(playerRealDimension.y / cardSize)
         }
 
         const n = 2;
@@ -652,15 +673,15 @@ class Game {
 
         if (!this.background) {
             this.background = new Rect(
-                this.canvas.width * (currentCard.x - n),
-                this.canvas.height * (currentCard.y - n),
-                this.canvas.width * (n * 2 + 1),
-                this.canvas.height * (n * 2 + 1),
+                cardSize * (currentCard.x - n),
+                cardSize * (currentCard.y - n),
+                cardSize * (n * 2 + 1),
+                cardSize * (n * 2 + 1),
                 '#1c2773'
             )
         }
-        this.background.x = this.canvas.width * (currentCard.x - n)
-        this.background.y = this.canvas.height * (currentCard.y - n)
+        this.background.x = cardSize * (currentCard.x - n)
+        this.background.y = cardSize * (currentCard.y - n)
         this.background.draw(this.context);
 
         for (let dx = -1; dx <= 1; dx++) {
@@ -670,8 +691,8 @@ class Game {
                 if (this.backgroundCards[cacheX]?.[cacheY]?.draw) {
                     this.backgroundCards[cacheX][cacheY].draw(this.context, {
                         // offset = posición mundo - posición almacenada en los Arc
-                        x: this.canvas.width * (currentCard.x + dx - cacheX),
-                        y: this.canvas.height * (currentCard.y + dy - cacheY)
+                        x: cardSize * (currentCard.x + dx - cacheX),
+                        y: cardSize * (currentCard.y + dy - cacheY)
                     });
                 }
             }

@@ -10,17 +10,31 @@ import { parseLayers } from '/js/utils/functions.js';
 
 window.forms = Forms;
 class Player {
-    constructor(ship, username, shipId, x = 0, y = 0, credits) {
+    constructor(ship, username, shipId, x = 0, y = 0, credits, animation) {
+        if (animation && shipId) {
+            throw new Error('Cannot provide both animation and shipId');
+        }
+
         this.name = username;
-        this.shipId = shipId;
         this.ship = ship;
         this.credits = credits || 0;
-        this.layers = parseLayers(this.ship.layers);
+        this.animation = animation;
+        if (!this.animation) {
+            this.layers = parseLayers(this.ship.layers);
+            this.shipId = shipId;
+        } else {
+            this.animation.repeat = true;
+        }
         this.x = x;
         this.y = y;
         this.nameShape = new Text(this.name, this.x, this.y - 10, 30, 'Helvetica', '#ffffff');
-        this.width = this.ship.width || this.ship.canvas.width;
-        this.height = this.ship.height || this.ship.canvas.height;
+        if (this.ship) {
+            this.width = this.ship.width || this.ship.canvas.width;
+            this.height = this.ship.height || this.ship.canvas.height;
+        } else {
+            this.width = animation ? animation.width : 0;
+            this.height = animation ? animation.height : 0;
+        }
         this.rotate = 0;
         this.bullets = [];
         this.life = 10;
@@ -40,23 +54,13 @@ class Player {
         this.calculateScale();
     }
 
-    draw_old(context) {
-        if (this.hide) return;
-        const rotationCenter = { x: this.ship.width / 2, y: this.ship.height / 2 };
-        const layerOptions = {
-            x: this.x + this.xTranslation,
-            y: this.y + this.yTranslation,
-            rotate: this.rotate,
-            rotationCenter,
-            scale: this.scale
-        };
-
-        for (const layer of this.layers) {
-            layer.draw(context, layerOptions);
+    setPosition(x, y) {
+        this.x = x;
+        this.y = y;
+        if (this.animation) {
+            this.animation.x = x;
+            this.animation.y = y;
         }
-        this.nameShape.x = layerOptions.x;
-        this.nameShape.y = layerOptions.y - 20;
-        this.nameShape.draw(context, { x: 0, y: 0 });
     }
 
     /**
@@ -64,8 +68,7 @@ class Player {
      * @param {CanvasRenderingContext2D} context 
      */
     draw(context) {
-
-        if (this.hide) return;
+        if (this.hide || this.animation) return;
         const realDimension = this.getRealDimension();
         const rotationCenter = { x: realDimension.width / 2, y: realDimension.height / 2 };
         const layerOptions = {
@@ -88,7 +91,7 @@ class Player {
      * @param {CanvasRenderingContext2D} context 
      */
     drawVectorial(context) {
-        if (this.hide) return;
+        if (this.hide || this.animation) return;
         const rotationCenter = { x: this.ship.width / 2, y: this.ship.height / 2 };
         const layerOptions = {
             x: 0,
@@ -112,7 +115,7 @@ class Player {
      * @param {*} layerOptions 
      */
     drawPicture(context, layerOptions) {
-        if (this.hide) return;
+        if (this.hide || this.animation) return;
         if (!this.picture) {
             this.render();
         }
@@ -123,6 +126,7 @@ class Player {
      * Renders the player's ship into a picture for optimized drawing. This is called whenever the player's scale changes, to ensure the picture is up to date with the current size.
      */
     render() {
+        if (this.animation) return;
         if (!this.pictureCanvas) {
             this.pictureCanvas = document.createElement('canvas');
         }

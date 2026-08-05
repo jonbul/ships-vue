@@ -1,8 +1,9 @@
 import { Arc, Ellipse, Layer } from './canvasClasses.js';
 
 class Animation {
-    constructor({ repeat = false, frames = [], layer = new Layer(), x = 0, y = 0, width = 0, height = 0, speed = 1, onEnd }) {
+    constructor({ repeat = false, maxDuration, frames = [], layer = new Layer(), x = 0, y = 0, width = 0, height = 0, speed = 1, onEnd }) {
         this.repeat = repeat;
+        this.maxDuration = maxDuration;
         this.frames = frames;
         this.layer = layer;
         this.x = x;
@@ -13,14 +14,19 @@ class Animation {
         this.onEnd = onEnd;
         this.playing = false;
         this.currentFrame = -1;
+        this.startTimestamp = null;
+        this.progress = 0;
     }
 
     play() {
         this.playing = true;
+        this.startTimestamp = !this.startTimestamp ? Date.now() : Date.now() - this.progress;
+        console.log("PLAY!");
     }
 
     pause() {
         this.playing = false;
+        this.progress = Date.now() - this.startTimestamp;
     }
 
     stop() {
@@ -30,11 +36,20 @@ class Animation {
 
     drawFrame(context, drawable) {
         this.currentFrame += this.speed;
-        if (this.currentFrame >= this.frames.length) {
+        if (this.currentFrame >= this.frames.length) { // animation ended
+            let limitTimeElapsed = !!this.maxDuration && (this.maxDuration > 0) && (Date.now() - this.startTimestamp) > this.maxDuration;
+
+
             if (this.repeat) {
                 this.currentFrame = -1;
-            } else {
+            }
+            if (!this.repeat || (this.repeat && limitTimeElapsed)) {
                 this.stop();
+                // Call onEnd callback if defined and if the animation is not set to repeat or if it has a maxDuration and the elapsed time is less than maxDuration
+                if (this.onEnd) {
+                    this.onEnd();
+                }
+                return;
             }
         }
         const frameActions = this.frames[this.currentFrame];
@@ -43,8 +58,6 @@ class Animation {
         }
         this.layer.draw(context, { x: this.x, y: this.y });
 
-        if (this.onEnd && !this.repeat && this.currentFrame >= this.frames.length - 1)
-            this.onEnd();
     }
 }
 
@@ -106,7 +119,7 @@ function getExplossionAnimation(x, y, width, height, speed = 1, onEnd) {
     })
 }
 
-function getBlackHoleAnimation(x, y, r) {
+function getBlackHoleAnimationBase(x, y, r, maxDuration) {
     const d = r / 50;
     const transparent = '#00000000';
     const black = '#000000';
@@ -179,9 +192,30 @@ function getBlackHoleAnimation(x, y, r) {
         width: r * 2,
         height: r * 2,
         repeat: true,
-        speed: 0.5
+        speed: 0.5,
+        maxDuration
     })
-
 }
 
-export { getExplossionAnimation, getBlackHoleAnimation };
+function getBlackHoleAnimations(x, y, r, maxDuration = 25000) {
+    const arc = new Arc(x, y, 0, '#ffffff77');
+    const layer = new Layer('', [arc]);
+    const startFrames = [];
+
+    function increaseRadius(inc) {
+        arc.radius += inc;
+    }
+
+    for (let i = 0; i < 5000; i++) {
+        startFrames.push(() => increaseRadius(10));
+    }
+
+    const flashAnimation = new Animation({ repeat: false, maxDuration, frames: [startFrames], layer, x, y, width: r * 2, height: r * 2, speed: 1 });
+
+
+    const animation = getBlackHoleAnimationBase(x, y, r, maxDuration);
+
+    return [flashAnimation, animation];
+}
+
+export { getExplossionAnimation, getBlackHoleAnimations, getBlackHoleAnimationBase };

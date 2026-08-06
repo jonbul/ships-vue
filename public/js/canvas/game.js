@@ -520,23 +520,31 @@ class Game {
 
         if (data.blackHole) {
             console.log('Black hole event received:', data.blackHole);
+            const NPCs = this.NPCs;
+            const animations = this.animations;
             const blackHoleData = data.blackHole;
 
             const [flashAnimation, bhAnimation] = getBlackHoleAnimations(blackHoleData.x, blackHoleData.y, blackHoleData.maxSize / 2, blackHoleData.duration * 1000);
-            this.animations.push(flashAnimation);
-            this.animations.push(bhAnimation);
-            bhAnimation.onEnd = () => {
+
+            animations.push(flashAnimation);
+            animations.push(bhAnimation);
+            function removeAnimation(animation) {
                 console.log('Black hole animation ended, removing from animations and NPCs');
-                this.NPCs = this.NPCs.filter(npc => npc !== blackHole);
-                const index = this.animations.indexOf(bhAnimation);
-                if (index !== -1) {
-                    this.animations.splice(index, 1);
+
+                const npcIndex = NPCs.indexOf(bhAnimation);
+                if (npcIndex !== -1) {
+                    NPCs.splice(npcIndex, 1);
+                }
+
+                const animationIndex = animations.indexOf(bhAnimation);
+                if (animationIndex !== -1) {
+                    animations.splice(animationIndex, 1);
                 }
             }
 
-            const blackHole = new Player(null, null, null, blackHoleData.x, blackHoleData.y, null, bhAnimation);
-            blackHole.setPosition(blackHoleData.x, blackHoleData.y);
-            this.NPCs.push(blackHole);
+            bhAnimation.addEndCallback(removeAnimation);
+            NPCs.push(bhAnimation);
+
             bhAnimation.play();
             flashAnimation.play();
         }
@@ -596,6 +604,10 @@ class Game {
         this.drawableBullets.draw(this.context);
         for (let p of this.drawablePlayers) {
             p.draw(this.context);
+        }
+        for (let npc of this.NPCs) {
+            if (npc?.draw) npc.draw(this.context);
+            if (npc?.drawFrame) npc.drawFrame(this.context, true);
         }
 
         this.animations.forEach(anim => {

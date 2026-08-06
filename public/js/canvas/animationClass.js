@@ -1,21 +1,25 @@
 import { Arc, Ellipse, Layer } from './canvasClasses.js';
 
 class Animation {
-    constructor({ repeat = false, maxDuration, frames = [], layer = new Layer(), x = 0, y = 0, width = 0, height = 0, speed = 1, onEnd }) {
+    constructor({ repeat = false, maxDuration, frames = [], layer = new Layer(), x = 0, y = 0, width = 0, height = 0, speed = 1, scale = 1, onEnd }) {
         this.repeat = repeat;
         this.maxDuration = maxDuration;
-        this.frames = frames;
+        this.frames = frames.map(frame => frame.map(action => action.bind(this)));
         this.layer = layer;
         this.x = x;
         this.y = y;
         this.width = width;
         this.height = height;
         this.speed = speed;
-        this.onEnd = onEnd;
+        this.onEnd = [];
+        if (onEnd) {
+            this.onEnd.push(onEnd.bind(this));
+        }
         this.playing = false;
         this.currentFrame = -1;
         this.startTimestamp = null;
         this.progress = 0;
+        this.scale = scale;
     }
 
     play() {
@@ -34,7 +38,11 @@ class Animation {
         this.currentFrame = -1;
     }
 
-    drawFrame(context, drawable) {
+    addEndCallback(callback) {
+        this.onEnd.push(callback.bind(this));
+    }
+
+    nextFrame() {
         this.currentFrame += this.speed;
         if (this.currentFrame >= this.frames.length) { // animation ended
             let limitTimeElapsed = !!this.maxDuration && (this.maxDuration > 0) && (Date.now() - this.startTimestamp) > this.maxDuration;
@@ -46,18 +54,21 @@ class Animation {
             if (!this.repeat || (this.repeat && limitTimeElapsed)) {
                 this.stop();
                 // Call onEnd callback if defined and if the animation is not set to repeat or if it has a maxDuration and the elapsed time is less than maxDuration
-                if (this.onEnd) {
-                    this.onEnd();
+                if (this.onEnd.length) {
+                    this.onEnd.forEach(callback => callback());
                 }
                 return;
             }
         }
+    }
+
+    drawFrame(context, drawable) {
+        this.nextFrame();
         const frameActions = this.frames[this.currentFrame];
         if (frameActions && frameActions.length && drawable) {
             frameActions.forEach(action => action());
         }
-        this.layer.draw(context, { x: this.x, y: this.y });
-
+        this.layer.draw(context, { x: this.x, y: this.y, scale: this.scale, width: this.width, height: this.height });
     }
 }
 
@@ -163,8 +174,8 @@ function getBlackHoleAnimationBase(x, y, r, maxDuration) {
     const maxRadius = r + 8 * d;
     const maxEllipseRadiusX = ellipseRx + 8 * d;
     const itemsToSkip = 1;
-
-    const frames = [[() => {
+    function blackHoleFrame() {
+        let maxR = 0;
         for (let i = 0; i < arcsToEdit.length; i++) {
             const shape = arcsToEdit[i];
             shape.radius += d;
@@ -181,8 +192,22 @@ function getBlackHoleAnimationBase(x, y, r, maxDuration) {
                 shape.radiusX = ellipseRx;
                 shape.radiusY = ellipseRy;
             }
+            if (shape.radiusX > maxR) {
+                maxR = shape.radiusX;
+            }
+            if (shape.radiusY > maxR) {
+                maxR = shape.radiusY;
+            }
         }
-    }]];
+
+        this.width = maxR * 2;
+        this.height = maxR * 2;
+        if (this.scale < 1) {
+            this.scale += 0.01;
+            console.log((Date.now() - this.startTimestamp) / 1000);
+        }
+    }
+    const frames = [[blackHoleFrame]];
 
     return new Animation({
         frames,
@@ -193,7 +218,8 @@ function getBlackHoleAnimationBase(x, y, r, maxDuration) {
         height: r * 2,
         repeat: true,
         speed: 0.5,
-        maxDuration
+        maxDuration,
+        scale: 0.01,
     })
 }
 
@@ -213,9 +239,9 @@ function getBlackHoleAnimations(x, y, r, maxDuration = 25000) {
     const flashAnimation = new Animation({ repeat: false, maxDuration, frames: [startFrames], layer, x, y, width: r * 2, height: r * 2, speed: 1 });
 
 
-    const animation = getBlackHoleAnimationBase(x, y, r, maxDuration);
+    const bhAnimation = getBlackHoleAnimationBase(x, y, r, maxDuration);
 
-    return [flashAnimation, animation];
+    return [flashAnimation, bhAnimation];
 }
 
 export { getExplossionAnimation, getBlackHoleAnimations, getBlackHoleAnimationBase };

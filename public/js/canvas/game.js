@@ -600,6 +600,8 @@ class Game {
                 if (!NPCs[id]) {
                     const [flashAnimation, bhAnimation] = getBlackHoleAnimations(blackHoleData);
 
+                    console.log('Adding black hole animations:', flashAnimation.name, flashAnimation.x, flashAnimation.y, bhAnimation.name, bhAnimation.x, bhAnimation.y);
+
                     animations.push(flashAnimation);
                     animations.push(bhAnimation);
                     function removeAnimation() {
@@ -622,7 +624,7 @@ class Game {
                 }
             }
 
-            for (const id in NPCs) {
+            /*for (const id in NPCs) {
                 if (!data.blackHoles[id]) {
                     const bhAnimation = NPCs[id];
                     delete NPCs[id];
@@ -632,7 +634,7 @@ class Game {
                         animations.splice(index, 1);
                     }
                 }
-            }
+            }*/
         }
 
     }
@@ -699,6 +701,8 @@ class Game {
         this.animations.forEach(anim => {
             if (anim.playing) {
                 anim.drawFrame(this.context, this.checkRectsCollision(anim, this.viewRect));
+
+                new Rect(anim.x, anim.y, anim.width * anim.scale, anim.height * anim.scale, null, '#ff0000', 2).draw(this.context);
             }
         });
         this.drawArrows();

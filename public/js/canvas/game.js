@@ -258,22 +258,27 @@ class Game {
         let lastTime = null;
         let accumulator = 0;
         const loop = (timestamp) => {
-            if (lastTime === null) {
+            try {
+                if (lastTime === null) {
+                    lastTime = timestamp;
+                }
+
+                let delta = timestamp - lastTime;
                 lastTime = timestamp;
-            }
 
-            let delta = timestamp - lastTime;
-            lastTime = timestamp;
+                // Clamp delta to avoid spiral-of-death after long pauses or tab switches
+                if (delta > 100) {
+                    delta = 100;
+                }
+                accumulator += delta;
+                // Run the fixed-timestep game updates
+                while (accumulator >= timestep) {
+                    this.intervalMethod();
+                    accumulator -= timestep;
+                }
 
-            // Clamp delta to avoid spiral-of-death after long pauses or tab switches
-            if (delta > 100) {
-                delta = 100;
-            }
-            accumulator += delta;
-            // Run the fixed-timestep game updates
-            while (accumulator >= timestep) {
-                this.intervalMethod();
-                accumulator -= timestep;
+            } catch (error) {
+                console.error('Error in game loop:', error);
             }
             requestAnimationFrame(loop);
         };

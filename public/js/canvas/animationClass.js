@@ -228,20 +228,19 @@ function getBlackHoleAnimationBase(blackHoleData) {
 function getBlackHoleAnimations(blackHoleData) {
     const arc = new Arc(blackHoleData.x, blackHoleData.y, 0, '#ffffff77');
     const layer = new Layer('', [arc]);
-    const startFrames = [];
 
-    function increaseRadius(inc) {
-        arc.radius += inc;
-    }
+    const steps = 30; // duracion visual del flash
+    const targetRadius = blackHoleData.maxSize; // diametro final = 2 * maxSize
+    const inc = targetRadius / steps;
 
-    for (let i = 0; i < 5000; i++) {
-        startFrames.push(() => increaseRadius(10));
+    const frames = [];
+    for (let i = 0; i < steps; i++) {
+        frames.push([() => { arc.radius += inc; }]); // 1 accion por frame
     }
 
     const flashAnimation = new Animation({
         repeat: false,
-        //maxDuration: blackHoleData.maxDuration,
-        frames: [startFrames],
+        frames,
         layer,
         x: blackHoleData.x,
         y: blackHoleData.y,
@@ -250,9 +249,7 @@ function getBlackHoleAnimations(blackHoleData) {
         speed: 1
     });
 
-
     const bhAnimation = getBlackHoleAnimationBase(blackHoleData);
-
     return [flashAnimation, bhAnimation];
 }
 

@@ -72,7 +72,9 @@ class Animation {
                 frameActions.forEach(action => action());
             }
         }
-        this.layer.draw(context, { x: this.x, y: this.y, scale: this.scale, width: this.width, height: this.height });
+        if (drawable) {
+            this.layer.draw(context, { x: this.x, y: this.y, scale: this.scale, width: this.width, height: this.height });
+        }
     }
 }
 

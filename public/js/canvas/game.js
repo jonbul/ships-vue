@@ -47,11 +47,16 @@ class Game {
 
         this.createStaticCanvas();
 
+        this.wsQueue = [];
+        this.wsConnecting = false;
+        this.reconnectAttempts = 0;
+
         // Wait for connection
         let tryCount = 0;
         const connectWebSocket = () => {
+            this.wsConnecting = true;
             try {
-                this.ws = new WebSocket(websocketHost);
+                this.createNewWebSocket();
             } catch (error) {
                 console.error('WebSocket connection failed:', error);
                 if (tryCount < 5) {
@@ -71,6 +76,26 @@ class Game {
             }
         }
         connectWebSocket();
+
+
+
+        setInterval(() => {
+            if (this.wsConnecting) return;
+            if (this.wsQueue.length > 0 && this.ws.readyState === WebSocket.OPEN) {
+                const now = Date.now();
+                const messageList = this.wsQueue.splice(0, this.wsQueue.length)
+                    .filter(i => {
+                        if (i.eventName === 'playerData' && now > i.ts + 1000) {
+                            return false;
+                        }
+                        return true;
+                    });
+
+                if (messageList.length) {
+                    this.ws.send(JSON.stringify(messageList));
+                }
+            }
+        }, 10);
     }
 
     runBlackHole(x, y, r = 100) {
@@ -81,6 +106,7 @@ class Game {
     }
 
     async onWebSocketOpen() {
+        this.wsConnecting = false;
         const tempPlayers = (await asyncRequest({ path: '/game/getPlayers', method: 'GET' }));
         for (const id in tempPlayers) {
             this.updatePlayers(tempPlayers[id]);
@@ -121,34 +147,71 @@ class Game {
         this.context.translate(x - this.player.x, y - this.player.y);
     }
 
-    _reconnect() {
+    createNewWebSocket() {
+        this.ws = new WebSocket(websocketHost);
+        this.ws.addEventListener('close', (event) => {
+            const MAX_ATTEMPTS = 10;
+            const DELAY_MS = 50;
+            console.warn('⚠️ Disconnected:', event.code, event.reason);
+
+            if (this.reconnectAttempts < MAX_ATTEMPTS) {
+                setTimeout(this._reconnect.bind(this), DELAY_MS);
+            } else {
+                console.error('❌ All reconnection attempts failed');
+                showAlert({ msg: 'Failed to reconnect. Please reload the page.', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
+                setTimeout(() => location.reload(), 5000);
+            }
+        });
+    }
+
+    _reconnect(callback) {
         const MAX_ATTEMPTS = 10;
-        const DELAY_MS = 2000;
-        let attempts = 0;
+        const DELAY_MS = 50;
 
-        const tryConnect = () => {
-            attempts++;
-            console.log(`🔄 Reconnecting... Attempt ${attempts}`);
-            showAlert({ msg: `Reconnecting... Attempt ${attempts}`, title: 'Info', type: ALERT_TYPES.INFO, duration: 2000 });
-            this.ws = new WebSocket(websocketHost);
-            this.ws.addEventListener('open', () => {
-                console.log('✅ Reconnected. Reloading...');
-                location.reload();
-            });
-            this.ws.addEventListener('close', () => {
-                if (attempts < MAX_ATTEMPTS) {
-                    setTimeout(tryConnect, DELAY_MS);
+        //const tryConnect = () => {
+        this.reconnectAttempts++;
+        console.log(`🔄 Reconnecting... Attempt ${this.reconnectAttempts}`);
+        showAlert({ msg: `Reconnecting... Attempt ${this.reconnectAttempts}`, title: 'Info', type: ALERT_TYPES.INFO, duration: 2000 });
+        try {
+            this.createNewWebSocket();
+
+            if (this.ws.readyState === WebSocket.CONNECTING) {
+                if (this.intervalRunning) {
+                    this.ws.addEventListener('open', () => {
+                        this.socketIOEvents();
+                        this.runCallBackValidating(callback);
+                    });
                 } else {
-                    console.error('❌ All reconnection attempts failed');
-                    showAlert({ msg: 'Failed to reconnect. Please reload the page.', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
+                    this.ws.addEventListener('open', () => {
+                        this.onWebSocketOpen();
+                        this.runCallBackValidating(callback);
+                    });
                 }
-            });
-        };
+            } else if (this.ws.readyState === WebSocket.OPEN) {
+                if (this.intervalRunning) {
+                    this.socketIOEvents();
+                } else {
+                    this.onWebSocketOpen();
+                }
+                this.runCallBackValidating(callback);
+            }
+        } catch (error) {
+            if (this.reconnectAttempts < MAX_ATTEMPTS) {
+                setTimeout(this._reconnect.bind(this, callback), DELAY_MS);
+            } else {
+                console.error('❌ All reconnection attempts failed');
+                showAlert({ msg: 'Failed to reconnect. Please reload the page.', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
+                setTimeout(() => location.reload(), 5000);
+            }
+        }
+    }
 
-        setTimeout(tryConnect, DELAY_MS);
+    runCallBackValidating(callback) {
+        if (callback && typeof callback === 'function') callback.bind(this)();
     }
 
     socketIOEvents() {
+        this.reconnectAttempts = 0;
         this.ws.events = {};
 
         this.ws.addEventListener('message', event => {
@@ -166,7 +229,17 @@ class Game {
 
         this.ws.sendData = (function (eventName, data) {
             data = data || {};
-            this.ws.send(JSON.stringify({ ...data, eventName }));
+            this.wsQueue.push({ ...data, eventName, ts: Date.now() });
+            /*try {
+                if (this.ws.readyState === WebSocket.OPEN) {
+                    //this.ws.send(JSON.stringify({ ...data, eventName }));
+                    
+                } else {
+                    this._reconnect();
+                }
+            } catch (error) {
+                console.error('Failed to send data:', error);
+            }*/
         }).bind(this);
 
         this.ws.on('gameBroadcast', this.gameBroadcast.bind(this));
@@ -218,6 +291,7 @@ class Game {
                     )
                 }
             }
+            this.requestingBackgroundCards = false;
         })
 
         // ✅ Manage connection events
@@ -232,28 +306,24 @@ class Game {
             location.reload();
         });
 
-        this.ws.addEventListener('close', (event) => {
-            console.warn('⚠️ Disconnected:', event.code, event.reason);
-            this._reconnect();
-        });
-
         this.ws.on('connectionSuccess', data => {
             console.log('✅ Connection established with socket ID:', data.socketId);
             this.socketId = data.socketId;
             this.player.socketId = data.socketId;
             this.players[this.player.socketId] = this.player;
+
+            //this.ws.sendData('playerData', this.player.getSortDetails());
+
+            this.beginInterval();
         });
 
         this.ws.sendData('connectionSuccess');
 
         this.playerUpdated = true;
-        this.beginInterval();
-        setTimeout(() => {
-            this.ws.sendData('playerData', this.player.getSortDetails());
-        }, 1);
     }
 
     beginInterval() {
+        if (this.intervalRunning) return;
         const timestep = 1000 / 30; // 30 updates per second (fixed timestep)
         let lastTime = null;
         let accumulator = 0;
@@ -283,6 +353,7 @@ class Game {
             requestAnimationFrame(loop);
         };
         requestAnimationFrame(loop);
+        this.intervalRunning = true;
     }
 
     toFullScreen(e) {
@@ -625,7 +696,6 @@ class Game {
         for (let id in this.NPCs) {
             const npc = this.NPCs[id];
             if (npc?.draw) npc.draw(this.context);
-            if (npc?.drawFrame) npc.drawFrame(this.context, true);
         }
 
         this.animations.forEach(anim => {

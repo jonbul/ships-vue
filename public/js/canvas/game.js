@@ -35,7 +35,7 @@ class Game {
         this.ship = ship;
         this.backgroundCards = [];
         this.players = {};
-        this.NPCs = [];
+        this.NPCs = {};
         this.bullets = {};
         this.keys = [];
         this.shipsManager = shipsManager;
@@ -317,12 +317,12 @@ class Game {
             100
         );
         this.animations.push(explossion);
-        explossion.onEnd = () => {
+        explossion.addEndCallback(() => {
             const index = this.animations.indexOf(explossion);
             if (index !== -1) {
                 this.animations.splice(index, 1);
             }
-        }
+        });
         explossion.play();
         gameSounds.explosion();
 
@@ -518,35 +518,47 @@ class Game {
             }
         }
 
-        if (data.blackHole) {
-            console.log('Black hole event received:', data.blackHole);
+        if (data.blackHoles) {
             const NPCs = this.NPCs;
             const animations = this.animations;
-            const blackHoleData = data.blackHole;
+            for (const id in data.blackHoles) {
+                const blackHoleData = data.blackHoles[id];
+                if (!NPCs[id]) {
+                    const [flashAnimation, bhAnimation] = getBlackHoleAnimations(blackHoleData);
 
-            const [flashAnimation, bhAnimation] = getBlackHoleAnimations(blackHoleData.x, blackHoleData.y, blackHoleData.maxSize / 2, blackHoleData.duration * 1000);
+                    animations.push(flashAnimation);
+                    animations.push(bhAnimation);
+                    function removeAnimation() {
+                        const animationIndex = animations.indexOf(flashAnimation);
+                        if (animationIndex !== -1) {
+                            animations.splice(animationIndex, 1);
+                        }
+                    }
 
-            animations.push(flashAnimation);
-            animations.push(bhAnimation);
-            function removeAnimation(animation) {
-                console.log('Black hole animation ended, removing from animations and NPCs');
+                    flashAnimation.addEndCallback(removeAnimation);
+                    NPCs[id] = bhAnimation;
 
-                const npcIndex = NPCs.indexOf(bhAnimation);
-                if (npcIndex !== -1) {
-                    NPCs.splice(npcIndex, 1);
-                }
-
-                const animationIndex = animations.indexOf(bhAnimation);
-                if (animationIndex !== -1) {
-                    animations.splice(animationIndex, 1);
+                    bhAnimation.play();
+                    flashAnimation.play();
+                } else { // update NPC position
+                    const npc = NPCs[id];
+                    npc.x = blackHoleData.x;
+                    npc.y = blackHoleData.y;
+                    npc.scale = blackHoleData.scale;
                 }
             }
 
-            bhAnimation.addEndCallback(removeAnimation);
-            NPCs.push(bhAnimation);
-
-            bhAnimation.play();
-            flashAnimation.play();
+            for (const id in NPCs) {
+                if (!data.blackHoles[id]) {
+                    const bhAnimation = NPCs[id];
+                    delete NPCs[id];
+                    bhAnimation.stop();
+                    const index = animations.indexOf(bhAnimation);
+                    if (index !== -1) {
+                        animations.splice(index, 1);
+                    }
+                }
+            }
         }
 
     }
@@ -605,7 +617,8 @@ class Game {
         for (let p of this.drawablePlayers) {
             p.draw(this.context);
         }
-        for (let npc of this.NPCs) {
+        for (let id in this.NPCs) {
+            const npc = this.NPCs[id];
             if (npc?.draw) npc.draw(this.context);
             if (npc?.drawFrame) npc.drawFrame(this.context, true);
         }

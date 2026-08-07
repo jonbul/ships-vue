@@ -25,17 +25,19 @@ class Animation {
     play() {
         this.playing = true;
         this.startTimestamp = !this.startTimestamp ? Date.now() : Date.now() - this.progress;
-        console.log("PLAY!");
     }
 
     pause() {
-        this.playing = false;
+        if (!this.playing) return;
         this.progress = Date.now() - this.startTimestamp;
+        this.playing = false;
     }
 
     stop() {
         this.playing = false;
         this.currentFrame = -1;
+        this.startTimestamp = null;
+        this.progress = 0;
     }
 
     addEndCallback(callback) {
@@ -63,10 +65,12 @@ class Animation {
     }
 
     drawFrame(context, drawable) {
-        this.nextFrame();
-        const frameActions = this.frames[this.currentFrame];
-        if (frameActions && frameActions.length && drawable) {
-            frameActions.forEach(action => action());
+        if (this.playing) {
+            this.nextFrame();
+            const frameActions = this.frames[this.currentFrame];
+            if (frameActions && frameActions.length && drawable) {
+                frameActions.forEach(action => action());
+            }
         }
         this.layer.draw(context, { x: this.x, y: this.y, scale: this.scale, width: this.width, height: this.height });
     }
@@ -130,7 +134,9 @@ function getExplossionAnimation(x, y, width, height, speed = 1, onEnd) {
     })
 }
 
-function getBlackHoleAnimationBase(x, y, r, maxDuration) {
+function getBlackHoleAnimationBase(blackHoleData) {
+    const { x, y, maxDuration, scale } = blackHoleData;
+    const r = blackHoleData.maxSize / 2;
     const d = r / 50;
     const transparent = '#00000000';
     const black = '#000000';
@@ -202,10 +208,6 @@ function getBlackHoleAnimationBase(x, y, r, maxDuration) {
 
         this.width = maxR * 2;
         this.height = maxR * 2;
-        if (this.scale < 1) {
-            this.scale += 0.01;
-            console.log((Date.now() - this.startTimestamp) / 1000);
-        }
     }
     const frames = [[blackHoleFrame]];
 
@@ -218,13 +220,13 @@ function getBlackHoleAnimationBase(x, y, r, maxDuration) {
         height: r * 2,
         repeat: true,
         speed: 0.5,
-        maxDuration,
-        scale: 0.01,
+        //maxDuration,
+        scale,
     })
 }
 
-function getBlackHoleAnimations(x, y, r, maxDuration = 25000) {
-    const arc = new Arc(x, y, 0, '#ffffff77');
+function getBlackHoleAnimations(blackHoleData) {
+    const arc = new Arc(blackHoleData.x, blackHoleData.y, 0, '#ffffff77');
     const layer = new Layer('', [arc]);
     const startFrames = [];
 
@@ -236,10 +238,20 @@ function getBlackHoleAnimations(x, y, r, maxDuration = 25000) {
         startFrames.push(() => increaseRadius(10));
     }
 
-    const flashAnimation = new Animation({ repeat: false, maxDuration, frames: [startFrames], layer, x, y, width: r * 2, height: r * 2, speed: 1 });
+    const flashAnimation = new Animation({
+        repeat: false,
+        //maxDuration: blackHoleData.maxDuration,
+        frames: [startFrames],
+        layer,
+        x: blackHoleData.x,
+        y: blackHoleData.y,
+        width: blackHoleData.maxSize * 2,
+        height: blackHoleData.maxSize * 2,
+        speed: 1
+    });
 
 
-    const bhAnimation = getBlackHoleAnimationBase(x, y, r, maxDuration);
+    const bhAnimation = getBlackHoleAnimationBase(blackHoleData);
 
     return [flashAnimation, bhAnimation];
 }

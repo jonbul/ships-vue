@@ -312,8 +312,6 @@ class Game {
             this.player.socketId = data.socketId;
             this.players[this.player.socketId] = this.player;
 
-            //this.ws.sendData('playerData', this.player.getSortDetails());
-
             this.beginInterval();
         });
 

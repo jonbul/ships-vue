@@ -15,7 +15,7 @@ import {
 
 import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED, ALERT_TYPES } from '/js/utils/constants.js';
 import { asyncRequest, showAlert } from '/js/utils/functions.js';
-import { getExplossionAnimation, getBlackHoleAnimations, getBlackHoleAnimationBase } from './animationClass.js';
+import { getExplossionAnimation, getBlackHoleAnimation } from './animationClass.js';
 import gameSounds from './gameSounds.js';
 import MessagesManager from './messagesManagerClass.js';
 
@@ -598,24 +598,11 @@ class Game {
             for (const id in data.blackHoles) {
                 const blackHoleData = data.blackHoles[id];
                 if (!NPCs[id]) {
-                    const [flashAnimation, bhAnimation] = getBlackHoleAnimations(blackHoleData);
+                    const bhAnimation = getBlackHoleAnimation(blackHoleData);
 
-                    console.log('Adding black hole animations:', flashAnimation.name, flashAnimation.x, flashAnimation.y, bhAnimation.name, bhAnimation.x, bhAnimation.y);
-
-                    animations.push(flashAnimation);
-                    animations.push(bhAnimation);
-                    function removeAnimation() {
-                        const animationIndex = animations.indexOf(flashAnimation);
-                        if (animationIndex !== -1) {
-                            animations.splice(animationIndex, 1);
-                        }
-                    }
-
-                    flashAnimation.addEndCallback(removeAnimation);
                     NPCs[id] = bhAnimation;
 
                     bhAnimation.play();
-                    flashAnimation.play();
                 } else { // update NPC position
                     const npc = NPCs[id];
                     npc.x = blackHoleData.x;
@@ -624,7 +611,7 @@ class Game {
                 }
             }
 
-            /*for (const id in NPCs) {
+            for (const id in NPCs) {
                 if (!data.blackHoles[id]) {
                     const bhAnimation = NPCs[id];
                     delete NPCs[id];
@@ -634,7 +621,7 @@ class Game {
                         animations.splice(index, 1);
                     }
                 }
-            }*/
+            }
         }
 
     }
@@ -702,7 +689,7 @@ class Game {
             if (anim.playing) {
                 anim.drawFrame(this.context, this.checkRectsCollision(anim, this.viewRect));
 
-                new Rect(anim.x, anim.y, anim.width * anim.scale, anim.height * anim.scale, null, '#ff0000', 2).draw(this.context);
+                //new Rect(anim.x, anim.y, anim.width * anim.scale, anim.height * anim.scale, null, '#ff0000', 2).draw(this.context);
             }
         });
         this.drawArrows();

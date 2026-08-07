@@ -692,6 +692,7 @@ class Game {
                 //new Rect(anim.x, anim.y, anim.width * anim.scale, anim.height * anim.scale, null, '#ff0000', 2).draw(this.context);
             }
         });
+        this.player.draw(this.context);
         this.drawArrows();
 
         if (this.isSmartphone) {

@@ -13,7 +13,7 @@ import {
     Player
 } from './gameClasses.js';
 
-import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED, ALERT_TYPES } from '/js/utils/constants.js';
+import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED, ALERT_TYPES, NPC_TYPES } from '/js/utils/constants.js';
 import { asyncRequest, showAlert } from '/js/utils/functions.js';
 import { getExplossionAnimation, getBlackHoleAnimation } from './animationClass.js';
 import gameSounds from './gameSounds.js';
@@ -379,11 +379,16 @@ class Game {
     }
 
     onPlayerDied(msg) {
-        this.players[msg.playerId].deaths++;
-        this.players[msg.from].kills++;
-        this.players[msg.playerId].calculateScale();
-        this.players[msg.from].calculateScale();
-        const playerRealDimension = this.players[msg.playerId].getRealDimension();
+        const playerDied = this.player.socketId == msg.playerId ? this.player : this.players[msg.playerId];
+        const killer = this.players[msg.from];
+        playerDied.deaths++;
+        playerDied.calculateScale();
+
+        if (killer) {
+            killer.kills++;
+            killer.calculateScale();
+        }
+        const playerRealDimension = playerDied.getRealDimension();
         const explossion = getExplossionAnimation(
             playerRealDimension.x + playerRealDimension.width / 2,
             playerRealDimension.y + playerRealDimension.height / 2,
@@ -400,19 +405,20 @@ class Game {
         explossion.play();
         gameSounds.explosion();
 
-        const fromName = this.players[msg.from].name;
-        const diedName = this.players[msg.playerId].name;
+        const fromName = killer ? killer.name : null;
+        const diedName = playerDied.name;
         this.messagesManager.addKillMessage(fromName, diedName);
     }
 
     intervalMethod() {
 
+        this.applyNpcImpacts();
         if (this.isSmartphone) {
             this.movementSmarphone();
-            //this.movement();
         } else {
             this.movement();
         }
+
         this.bulletInterval();
 
         this.viewRect = {
@@ -446,6 +452,62 @@ class Game {
             this.ws.sendData('playerData', this.player.getSortDetails());
         }
         this.playerUpdated = false;
+    }
+
+    applyNpcImpacts() {
+        if (this.player.isDead) return;
+        const tempPosition = {
+            x: this.player.x,
+            y: this.player.y
+        }
+
+        const playerData = this.player.getRealDimension();
+        // theorical radius
+        const plRadius = getRadiusFromRect(playerData)
+        for (const id in this.NPCs) {
+            const npc = this.NPCs[id];
+            const npcData = {
+                x: npc.x,
+                y: npc.y,
+                width: npc.width * npc.scale,
+                height: npc.height * npc.scale,
+                centerX: npc.x + (npc.width * npc.scale) / 2,
+                centerY: npc.y + (npc.height * npc.scale) / 2,
+            }
+
+
+            switch (npc?.type) {
+                case NPC_TYPES.BLACK_HOLE:
+                    const npcRadius = getRadiusFromRect(npc);
+                    const npcData = npc.getRealDimension();
+                    const distance = Math.sqrt(Math.pow(npcData.centerX - playerData.centerX, 2) + Math.pow(npcData.centerY - playerData.centerY, 2)) - (plRadius + npcRadius);
+                    if (distance <= 0) {
+                        this.player.life = 0;
+
+                        this.ws.sendData('playerHit', {
+                            bulletId: null,
+                            playerId: this.player.socketId,
+                            from: null,
+                            fromNpc: NPC_TYPES.BLACK_HOLE,
+                            bulletCharge: this.player.life
+                        });
+                    } else if (distance <= 2000) { // move player towards black hole
+                        // jumpStep is the amount of distance to move the player towards the black hole per frame, based on the distance to the black hole. The closer the player is to the black hole, the faster they will be pulled in.
+                        const jumpStep = 1 / (distance / 1000);
+
+                        const angle = Math.atan2(npcData.centerY - playerData.centerY, npcData.centerX - playerData.centerX);
+                        this.player.x += Math.cos(angle) * jumpStep;
+                        this.player.y += Math.sin(angle) * jumpStep;
+                    }
+                    break;
+            }
+        }
+        this.player.setPosition(Math.round(this.player.x * 100) / 100, Math.round(this.player.y * 100) / 100);
+
+        const moveX = tempPosition.x - this.player.x;
+        const moveY = tempPosition.y - this.player.y;
+
+        this.context.translate(moveX, moveY);
     }
 
     clear() {
@@ -498,10 +560,10 @@ class Game {
                 break;
         }
 
-        player.x += moveX;
-        player.y += moveY;
+        const x = Math.round((player.x + moveX) * 100) / 100;
+        const y = Math.round((player.y + moveY) * 100) / 100;
 
-        player.setPosition(Math.round(player.x * 100) / 100, Math.round(player.y * 100) / 100);
+        player.setPosition(x, y);
 
         if (player.speed || this.keys[KEYS.LEFT] || this.keys[KEYS.RIGHT]) {
             if (!this.checkCollisionsWithPlayers()) {
@@ -599,10 +661,11 @@ class Game {
                 const blackHoleData = data.blackHoles[id];
                 if (!NPCs[id]) {
                     const bhAnimation = getBlackHoleAnimation(blackHoleData);
-
+                    bhAnimation.type = blackHoleData.type;
                     NPCs[id] = bhAnimation;
 
                     bhAnimation.play();
+                    animations.push(bhAnimation);
                 } else { // update NPC position
                     const npc = NPCs[id];
                     npc.x = blackHoleData.x;
@@ -663,6 +726,7 @@ class Game {
     }
 
     drawAll() {
+
         this.clear();
         let translateX;
         let translateY;
@@ -676,6 +740,9 @@ class Game {
             this.context.translate(-translateX, -translateY)
         }
         this.drawBackground();
+
+        this.player.draw(this.context);
+
         this.drawableBullets.draw(this.context);
         for (let p of this.drawablePlayers) {
             p.draw(this.context);
@@ -683,16 +750,15 @@ class Game {
         for (let id in this.NPCs) {
             const npc = this.NPCs[id];
             if (npc?.draw) npc.draw(this.context);
+            // new Rect(npc.x, npc.y, npc.width * npc.scale, npc.height * npc.scale, 'rgba(0, 0, 0, 0)', '#ff0000', 2).draw(this.context);
         }
 
         this.animations.forEach(anim => {
             if (anim.playing) {
                 anim.drawFrame(this.context, this.checkRectsCollision(anim, this.viewRect));
-
                 //new Rect(anim.x, anim.y, anim.width * anim.scale, anim.height * anim.scale, null, '#ff0000', 2).draw(this.context);
             }
         });
-        this.player.draw(this.context);
         this.drawArrows();
 
         if (this.isSmartphone) {
@@ -1171,6 +1237,10 @@ class Game {
             height: (arc.radiusY || arc.radius) * 2
         });
     }
+}
+
+function getRadiusFromRect(rect) {
+    return Math.sqrt(Math.pow(rect.width / 2, 2) + Math.pow(rect.height / 2, 2));
 }
 
 export default Game;

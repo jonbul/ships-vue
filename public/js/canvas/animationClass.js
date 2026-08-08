@@ -76,6 +76,16 @@ class Animation {
             this.layer.draw(context, { x: this.x, y: this.y, scale: this.scale, width: this.width, height: this.height });
         }
     }
+
+    getRealDimension() {
+        const x = this.x;
+        const y = this.y;
+        const width = this.width * this.scale;
+        const height = this.height * this.scale;
+        const centerX = x + width / 2;
+        const centerY = y + height / 2;
+        return { x, y, width, height, centerX, centerY };
+    }
 }
 
 function getExplossionAnimation(x, y, width, height, speed = 1, onEnd) {
@@ -138,7 +148,7 @@ function getExplossionAnimation(x, y, width, height, speed = 1, onEnd) {
 
 function getBlackHoleAnimation(blackHoleData) {
     const { x, y, scale, maxSize } = blackHoleData;
-
+    const center = maxSize / 2;
 
     const d = (maxSize / 2 / 50);
     const r = maxSize / 2 - d * 8
@@ -156,11 +166,11 @@ function getBlackHoleAnimation(blackHoleData) {
     const ellipseStart = degToRad(130);
     const ellipseEnd = degToRad(50);
 
-    const arcBorder = new Arc(0, 0, r + d * 5, transparent, shadow, d * 15);
-    const arcBg = new Arc(0, 0, r + d * 8, '#000000');
+    const arcBorder = new Arc(center, center, r + d * 5, transparent, shadow, d * 15);
+    const arcBg = new Arc(center, center, r + d * 8, '#000000');
 
-    const ellBorder = new Ellipse(0, 0, ellipseRx + d * 5, ellipseRy + d * 5, ellipseRotation, transparent, shadow, d * 15, degToRad(128), degToRad(52));
-    const ellBg = new Ellipse(0, 0, ellipseRx + d * 8, ellipseRy + d * 8, ellipseRotation, black, null, null, degToRad(160), degToRad(20));
+    const ellBorder = new Ellipse(center, center, ellipseRx + d * 5, ellipseRy + d * 5, ellipseRotation, transparent, shadow, d * 15, degToRad(128), degToRad(52));
+    const ellBg = new Ellipse(center, center, ellipseRx + d * 8, ellipseRy + d * 8, ellipseRotation, black, null, null, degToRad(160), degToRad(20));
 
     const offsets = [0, d, -d];
     let i = 0;
@@ -168,10 +178,12 @@ function getBlackHoleAnimation(blackHoleData) {
     const ellipsesToEdit = [];
     for (const ox of offsets) {
         for (const oy of offsets) {
-            const arc = new Arc(ox, oy, r + d * i, transparent, white, 4);
+            const centerOX = center + ox;
+            const centerOY = center + oy;
+            const arc = new Arc(centerOX, centerOY, r + d * i, transparent, white, 4);
             arcsToEdit.unshift(arc);
 
-            const ell = new Ellipse(ox, oy, ellipseRx + d * i, ellipseRy + d * 0, ellipseRotation, transparent, white, 4, ellipseStart, ellipseEnd);
+            const ell = new Ellipse(centerOX, centerOY, ellipseRx + d * i, ellipseRy + d * 0, ellipseRotation, transparent, white, 4, ellipseStart, ellipseEnd);
             ellipsesToEdit.unshift(ell);
             i++;
         }
@@ -180,8 +192,7 @@ function getBlackHoleAnimation(blackHoleData) {
     const layer = new Layer('', [arcBg, ...arcsToEdit, arcBorder, ellBg, ...ellipsesToEdit, ellBorder]);
 
     const maxArcRadius = r + 8 * d;
-    const maxEllipseRadiusX = ellipseRx + 8 * d;
-    const maxEllipseRadiusY = ellipseRy + 8 * d;
+    const maxEllipseRadius = ellipseRx + 8 * d;
 
     function blackHoleFrame() {
         let maxR = 0;
@@ -197,14 +208,16 @@ function getBlackHoleAnimation(blackHoleData) {
             const shape = ellipsesToEdit[i];
             shape.radiusX += d;
             shape.radiusY += d;
-            if (shape.radiusX > maxEllipseRadiusX) {
+            if (shape.radiusX > maxEllipseRadius) {
                 shape.radiusX = ellipseRx;
                 shape.radiusY = ellipseRy;
             }
         }
 
-        this.width = maxEllipseRadiusX * 2;
-        this.height = maxEllipseRadiusY * 2;
+        const sizeScaled = maxSize * this.scale;
+        console.log('sizeScaled', maxSize, this.scale, sizeScaled);
+        this.width = sizeScaled;
+        this.height = sizeScaled;
     }
     const frames = [[blackHoleFrame]];
 

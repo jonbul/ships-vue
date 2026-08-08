@@ -43,10 +43,6 @@ class Player {
     setPosition(x, y) {
         this.x = x;
         this.y = y;
-        if (this.animation) {
-            this.animation.x = x;
-            this.animation.y = y;
-        }
     }
 
     /**
@@ -156,11 +152,17 @@ class Player {
      * @returns {Object} An object containing the real dimensions of the player's ship, including the x and y position adjusted for translation, and the real width and height based on the current scale. This is used for accurate collision detection and drawing calculations.
      */
     getRealDimension() {
+        const x = this.x + (this.xTranslation || 0);
+        const y = this.y + (this.yTranslation || 0);
+        const width = this.realWidth || this.width;
+        const height = this.realHeight || this.height;
         return {
-            x: this.x + (this.xTranslation || 0),
-            y: this.y + (this.yTranslation || 0),
-            width: this.realWidth || this.width,
-            height: this.realHeight || this.height
+            x,
+            y,
+            width,
+            height,
+            centerX: x + width / 2,
+            centerY: y + height / 2
         }
     }
 

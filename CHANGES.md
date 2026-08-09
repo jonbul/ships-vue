@@ -1,5 +1,7 @@
 CHANGES
 =======
+- Version metadata.properties ---
+
 Version 1.0.2 - 2026-08-09
 ------------------
 * Parsing values editing shapes bugfix 

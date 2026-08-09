@@ -1,9 +1,13 @@
 CHANGES
 =======
+Version 1.0.2 - 2026-08-09
+------------------
+* Parsing values editing shapes bugfix 
+
 Version 1.0.1 - 2026-08-04
 ------------------
-- Black hole animation only
-- Fixing ghost
+* Black hole animation only
+* Fixing ghost
 
 2026-08-02 -> 1.0.0
 --------------------------------

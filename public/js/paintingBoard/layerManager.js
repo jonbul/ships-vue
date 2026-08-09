@@ -407,7 +407,7 @@ function editShapeProperty(evt) {
         shape.src = encodeURIComponent(propValue);
     } else if (["x", "y"].includes(propName)) {
         shape[propName] = parseInt(propValue);
-    } else if (["width", "height", "radius", "radiusX", "radiusY"].includes(propName)) {
+    } else if (["width", "height", "radius", "radiusX", "radiusY", "borderWidth"].includes(propName)) {
         shape[propName] = parseFloat(propValue);
     } else {
         if (propName === 'name' && shapeTitle) {

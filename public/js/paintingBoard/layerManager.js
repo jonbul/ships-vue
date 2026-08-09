@@ -343,6 +343,7 @@ function copyShape(shape) {
 }
 
 function radiansToDegrees(rad) {
+    if (typeof rad === "string") rad = parseFloat(rad);
     return rad * (180 / Math.PI);
 }
 
@@ -404,6 +405,10 @@ function editShapeProperty(evt) {
         shape[propName] = evt.target.checked;
     } else if (propName === "src") {
         shape.src = encodeURIComponent(propValue);
+    } else if (["x", "y"].includes(propName)) {
+        shape[propName] = parseInt(propValue);
+    } else if (["width", "height", "radius", "radiusX", "radiusY", "borderWidth"].includes(propName)) {
+        shape[propName] = parseFloat(propValue);
     } else {
         if (propName === 'name' && shapeTitle) {
             shapeTitle.innerText = propValue;

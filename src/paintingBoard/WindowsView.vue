@@ -90,7 +90,6 @@ import '/public/css/paintingBoard/windows.css'
       </table>
       <input type="color" id="borderColor" />
       <input type="Number" id="borderWidth" min="0" value="1" style="width: 50px;" />Border Width<br>
-      <input type="Button" id="btnBgColor" value="Set BackGround Color" style="width:100%;" onclick="setBgColor()" />
     </span>
   </span>
   <!--LAYERS-->

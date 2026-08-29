@@ -44,7 +44,7 @@ onUnmounted(() => {
       </div>
 
       <button class="btn btn-lg btn-primary btn-block" type="button" id="register">Register</button>
-      <span class="ml-auto">Already have an account? <a href="/login">Login here</a></span>
+      <span class="ml-auto">Already have an account? <RouterLink to="/login">Login here</RouterLink></span>
     </div>
   </div>
 </template>

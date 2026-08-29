@@ -493,8 +493,7 @@ class Game {
                         });
                     } else if (distance <= 2000) { // move player towards black hole
                         // jumpStep is the amount of distance to move the player towards the black hole per frame, based on the distance to the black hole. The closer the player is to the black hole, the faster they will be pulled in.
-                        const jumpStep = 1 / (distance / 1000);
-
+                        const jumpStep = (1 / (distance / 1000)) * 1.25;
                         const angle = Math.atan2(npcData.centerY - playerData.centerY, npcData.centerX - playerData.centerX);
                         this.player.x += Math.cos(angle) * jumpStep;
                         this.player.y += Math.sin(angle) * jumpStep;
@@ -661,6 +660,7 @@ class Game {
                 const blackHoleData = data.blackHoles[id];
                 if (!NPCs[id]) {
                     const bhAnimation = getBlackHoleAnimation(blackHoleData);
+                    bhAnimation.render(9);
                     bhAnimation.type = blackHoleData.type;
                     NPCs[id] = bhAnimation;
 
@@ -741,11 +741,15 @@ class Game {
         }
         this.drawBackground();
 
-        this.player.draw(this.context);
+        if (!this.player.isDead) {
+            this.player.draw(this.context);
+        }
 
         this.drawableBullets.draw(this.context);
         for (let p of this.drawablePlayers) {
-            p.draw(this.context);
+            if (!p.isDead) {
+                p.draw(this.context);
+            }
         }
         for (let id in this.NPCs) {
             const npc = this.NPCs[id];

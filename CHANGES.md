@@ -1,6 +1,7 @@
 CHANGES
 =======
-- Version metadata.properties ---
+- Version {metadata.properties} - 2026-XX-XX
+------------------
 
 Version 1.1.0 - 2026-08-XX
 ------------------

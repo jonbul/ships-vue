@@ -1,4 +1,4 @@
-import { Arc, Ellipse, Layer } from './canvasClasses.js';
+import { Arc, Ellipse, Layer, Picture } from './canvasClasses.js';
 
 class Animation {
     constructor({ repeat = false, maxDuration, frames = [], layer = new Layer(), x = 0, y = 0, width = 0, height = 0, speed = 1, scale = 1, onEnd }) {
@@ -85,6 +85,33 @@ class Animation {
         const centerX = x + width / 2;
         const centerY = y + height / 2;
         return { x, y, width, height, centerX, centerY };
+    }
+
+    render(reRunFrames = 1) {
+        const offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = this.width;
+        offscreenCanvas.height = this.height;
+        const offscreenContext = offscreenCanvas.getContext('2d');
+
+        if (!reRunFrames || reRunFrames < 1) {
+            reRunFrames = 1;
+        }
+        const pictures = [];
+        for (let r = 0; r < reRunFrames; r++) {
+            for (let i = 0; i < this.frames.length; i++) {
+                const frameActions = this.frames[i];
+                if (frameActions && frameActions.length) {
+                    frameActions.forEach(action => action());
+                }
+                offscreenContext.clearRect(0, 0, this.width, this.height);
+                this.layer.draw(offscreenContext, { x: 0, y: 0, scale: 1, width: this.width, height: this.height });
+                const frameImageData = offscreenContext.getImageData(0, 0, this.width, this.height);
+                const picture = new Picture(frameImageData, null, 0, 0, this.width, this.height, 0, 0, this.width, this.height);
+                pictures.push(picture);
+            }
+        }
+        const newFrames = pictures.map(picture => [(() => this.layer.shapes = [picture]).bind(this)]);
+        this.frames = newFrames;
     }
 }
 
@@ -215,7 +242,6 @@ function getBlackHoleAnimation(blackHoleData) {
         }
 
         const sizeScaled = maxSize * this.scale;
-        console.log('sizeScaled', maxSize, this.scale, sizeScaled);
         this.width = sizeScaled;
         this.height = sizeScaled;
     }

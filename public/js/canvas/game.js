@@ -15,7 +15,7 @@ import {
 
 import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED, ALERT_TYPES, NPC_TYPES } from '/js/utils/constants.js';
 import { asyncRequest, showAlert } from '/js/utils/functions.js';
-import { getExplossionAnimation, getBlackHoleAnimation, getBlackHoleAnimation2 } from './animationClass.js';
+import { getBlackHoleExplossionAnimation, getExplossionAnimation2, getBlackHoleAnimation2 } from './animationClass.js';
 import gameSounds from './gameSounds.js';
 import MessagesManager from './messagesManagerClass.js';
 
@@ -389,7 +389,9 @@ class Game {
             killer.calculateScale();
         }
         const playerRealDimension = playerDied.getRealDimension();
-        const explossion = getExplossionAnimation(
+        const killedByEnemyShot = !!msg.from && msg.from !== playerDied.socketId && !msg.fromNpc;
+        const explossionFactory = killedByEnemyShot ? getExplossionAnimation2 : getBlackHoleExplossionAnimation;
+        const explossion = explossionFactory(
             playerRealDimension.x,
             playerRealDimension.y,
             playerRealDimension.width > playerRealDimension.height ? playerRealDimension.width : playerRealDimension.height
@@ -805,7 +807,7 @@ class Game {
             }
         }
 
-        const debugRect = new Rect(0, 0, 0, 0, '#ff000000', '#ff0000', 20);
+        /*const debugRect = new Rect(0, 0, 0, 0, '#ff000000', '#ff0000', 20);
         for (const id in this.NPCs) {
             const npc = this.NPCs[id];
             debugRect.x = npc.x;

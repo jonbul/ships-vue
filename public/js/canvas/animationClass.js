@@ -222,6 +222,181 @@ function getExplossionAnimation(x, y, size, speed = 1, onEnd) {
     })
 }
 
+function getExplossionAnimation2(x, y, size, speed = 1, onEnd) {
+    const safeSize = Math.max(40, size || 120);
+    const center = safeSize / 2;
+    const core = new Arc(center, center, safeSize * 0.06, 'rgba(255,245,220,0.95)');
+    const fireball = new Arc(center, center, safeSize * 0.1, 'rgba(255,132,0,0.85)');
+    const shockwave = new Arc(
+        center,
+        center,
+        safeSize * 0.12,
+        'rgba(255,255,255,0)',
+        'rgba(255,210,120,0.95)',
+        Math.max(2, safeSize * 0.03)
+    );
+    const smokeFront = new Ellipse(center, center, safeSize * 0.14, safeSize * 0.09, 0, 'rgba(120,120,120,0.35)');
+    const smokeBack = new Ellipse(center, center, safeSize * 0.12, safeSize * 0.07, 0, 'rgba(70,70,70,0.28)');
+
+    const sparkCount = 12;
+    const sparks = [];
+    const sparkMeta = [];
+    for (let i = 0; i < sparkCount; i++) {
+        const spark = new Arc(center, center, safeSize * 0.02, 'rgba(255,240,170,0.9)');
+        sparks.push(spark);
+
+        const angle = (Math.PI * 2 * i) / sparkCount + ((i % 3) * 0.08);
+        const speedScale = 0.5 + (i % 5) * 0.14;
+        sparkMeta.push({ angle, speedScale });
+    }
+
+    const layer = new Layer('', [smokeBack, shockwave, fireball, ...sparks, core, smokeFront]);
+    const totalFrames = 54;
+    const frames = [];
+
+    for (let i = 0; i < totalFrames; i++) {
+        const action = () => {
+            const t = i / (totalFrames - 1);
+            const inv = 1 - t;
+
+            core.radius = safeSize * (0.05 + t * 0.5);
+            core.backgroundColor = `rgba(255, ${Math.round(240 - 170 * t)}, ${Math.round(220 - 210 * t)}, ${Math.max(0, 0.95 * inv).toFixed(3)})`;
+
+            fireball.radius = safeSize * (0.1 + t * 0.95);
+            fireball.backgroundColor = `rgba(255, ${Math.round(130 - 90 * t)}, ${Math.round(20 * inv)}, ${Math.max(0, 0.85 * inv).toFixed(3)})`;
+
+            shockwave.radius = safeSize * (0.14 + t * 1.45);
+            shockwave.borderWidth = Math.max(1, safeSize * (0.03 * inv + 0.004));
+            shockwave.borderColor = `rgba(255, ${Math.round(210 - 80 * t)}, ${Math.round(120 - 90 * t)}, ${Math.max(0, 0.95 * inv).toFixed(3)})`;
+
+            smokeFront.radiusX = safeSize * (0.15 + t * 1.15);
+            smokeFront.radiusY = safeSize * (0.08 + t * 0.55);
+            smokeFront.backgroundColor = `rgba(${Math.round(130 - 50 * t)}, ${Math.round(130 - 50 * t)}, ${Math.round(130 - 50 * t)}, ${Math.max(0, 0.26 * inv).toFixed(3)})`;
+
+            smokeBack.radiusX = safeSize * (0.12 + t * 1.35);
+            smokeBack.radiusY = safeSize * (0.07 + t * 0.72);
+            smokeBack.backgroundColor = `rgba(${Math.round(90 - 30 * t)}, ${Math.round(90 - 30 * t)}, ${Math.round(90 - 30 * t)}, ${Math.max(0, 0.2 * inv).toFixed(3)})`;
+
+            for (let j = 0; j < sparks.length; j++) {
+                const spark = sparks[j];
+                const meta = sparkMeta[j];
+                const travel = safeSize * (0.2 + 1.2 * t) * meta.speedScale;
+                spark.x = center + Math.cos(meta.angle) * travel;
+                spark.y = center + Math.sin(meta.angle) * travel;
+                spark.radius = Math.max(0.5, safeSize * (0.022 * inv + 0.002));
+                spark.backgroundColor = `rgba(255, ${Math.round(240 - 120 * t)}, ${Math.round(160 - 130 * t)}, ${Math.max(0, 0.9 * inv).toFixed(3)})`;
+            }
+        };
+        frames.push([action]);
+    }
+
+    return new Animation({
+        frames,
+        layer,
+        x,
+        y,
+        width: safeSize,
+        height: safeSize,
+        speed,
+        dynamicRender: true,
+        onEnd,
+    });
+}
+
+function getBlackHoleExplossionAnimation(x, y, size, speed = 1, onEnd) {
+    const safeSize = Math.max(50, size || 140);
+    const center = safeSize / 2;
+
+    const collapseCore = new Arc(center, center, safeSize * 0.45, 'rgba(0,0,0,0.9)');
+    const eventHorizon = new Arc(
+        center,
+        center,
+        safeSize * 0.5,
+        'rgba(0,0,0,0)',
+        'rgba(125,80,18,0.9)',
+        Math.max(2, safeSize * 0.03)
+    );
+    const gravityPulse = new Arc(
+        center,
+        center,
+        safeSize * 0.16,
+        'rgba(0,0,0,0)',
+        'rgba(216,160,84,0.9)',
+        Math.max(1, safeSize * 0.02)
+    );
+    const accretionA = new Ellipse(center, center, safeSize * 0.35, safeSize * 0.14, Math.PI / 6, 'rgba(219,145,62,0.22)');
+    const accretionB = new Ellipse(center, center, safeSize * 0.31, safeSize * 0.12, -Math.PI / 4, 'rgba(255,212,130,0.14)');
+
+    const debrisCount = 14;
+    const debris = [];
+    const debrisMeta = [];
+    for (let i = 0; i < debrisCount; i++) {
+        const p = new Arc(center, center, safeSize * 0.015, 'rgba(255,220,150,0.9)');
+        debris.push(p);
+        debrisMeta.push({
+            angle: (Math.PI * 2 * i) / debrisCount + (i % 2) * 0.11,
+            orbitScale: 0.65 + (i % 4) * 0.12,
+            phase: i * 0.45,
+        });
+    }
+
+    const layer = new Layer('', [gravityPulse, eventHorizon, accretionA, accretionB, ...debris, collapseCore]);
+    const totalFrames = 64;
+    const frames = [];
+
+    for (let i = 0; i < totalFrames; i++) {
+        const action = () => {
+            const t = i / (totalFrames - 1);
+            const inv = 1 - t;
+
+            collapseCore.radius = safeSize * (0.48 - 0.44 * t);
+            collapseCore.backgroundColor = `rgba(${Math.round(15 + 12 * inv)}, ${Math.round(10 + 8 * inv)}, ${Math.round(8 + 6 * inv)}, ${Math.max(0.45, 0.92 - t * 0.2).toFixed(3)})`;
+
+            eventHorizon.radius = safeSize * (0.5 - 0.3 * t);
+            eventHorizon.borderWidth = Math.max(1, safeSize * (0.03 * inv + 0.006));
+            eventHorizon.borderColor = `rgba(${Math.round(120 + 90 * inv)}, ${Math.round(75 + 70 * inv)}, ${Math.round(18 + 30 * inv)}, ${Math.max(0.2, 0.95 * inv).toFixed(3)})`;
+
+            gravityPulse.radius = safeSize * (0.16 + 1.0 * t);
+            gravityPulse.borderWidth = Math.max(1, safeSize * (0.02 * inv));
+            gravityPulse.borderColor = `rgba(${Math.round(255 - 80 * t)}, ${Math.round(215 - 120 * t)}, ${Math.round(140 - 110 * t)}, ${Math.max(0, 0.95 * inv).toFixed(3)})`;
+
+            accretionA.radiusX = safeSize * (0.35 - 0.24 * t);
+            accretionA.radiusY = safeSize * (0.14 - 0.08 * t);
+            accretionA.rotation += 0.09;
+            accretionA.backgroundColor = `rgba(219,145,62,${Math.max(0, 0.22 * inv).toFixed(3)})`;
+
+            accretionB.radiusX = safeSize * (0.31 - 0.23 * t);
+            accretionB.radiusY = safeSize * (0.12 - 0.07 * t);
+            accretionB.rotation -= 0.11;
+            accretionB.backgroundColor = `rgba(255,212,130,${Math.max(0, 0.16 * inv).toFixed(3)})`;
+
+            for (let j = 0; j < debris.length; j++) {
+                const d = debris[j];
+                const meta = debrisMeta[j];
+                const spiral = safeSize * (0.47 - 0.4 * t) * meta.orbitScale;
+                const theta = meta.angle + meta.phase + t * 9.0;
+                d.x = center + Math.cos(theta) * spiral;
+                d.y = center + Math.sin(theta) * spiral;
+                d.radius = Math.max(0.5, safeSize * (0.015 * inv + 0.002));
+                d.backgroundColor = `rgba(${Math.round(255 - 70 * t)}, ${Math.round(225 - 130 * t)}, ${Math.round(150 - 120 * t)}, ${Math.max(0, 0.9 * inv).toFixed(3)})`;
+            }
+        };
+        frames.push([action]);
+    }
+
+    return new Animation({
+        frames,
+        layer,
+        x,
+        y,
+        width: safeSize,
+        height: safeSize,
+        speed,
+        dynamicRender: true,
+        onEnd,
+    });
+}
+
 function getBlackHoleAnimation({ x, y, maxSize, scale = 1 }) {
     const center = maxSize / 2;
 
@@ -477,4 +652,4 @@ function getBlackHoleAnimation2({ x, y, maxSize, scale = 1 }) {
     });
 }
 
-export { getExplossionAnimation, getBlackHoleAnimation, getBlackHoleAnimation2 };
+export { getExplossionAnimation, getExplossionAnimation2, getBlackHoleExplossionAnimation, getBlackHoleAnimation, getBlackHoleAnimation2 };

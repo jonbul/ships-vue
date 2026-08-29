@@ -24,14 +24,14 @@ onUnmounted(() => {
 
       <div class="form-group">
         <label for="resolution" class="">Resolution</label>
-        <select id="resolution" class="form-control" required="true" autofocus="true" name="resolution" value="">
+        <select id="resolution" class="form-control" required autofocus name="resolution" value="">
 
         </select>
       </div>
 
       <div class="form-group">
         <label for="allowedPlayerType" class="">Players allowed</label>
-        <select id="allowedPlayerType" class="form-control" required="true" name="allowedPlayerType">
+        <select id="allowedPlayerType" class="form-control" required name="allowedPlayerType">
 
         </select>
       </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, onUnmounted } from 'vue';
+const injectedScripts: HTMLScriptElement[] = [];
 onMounted(() => {
   const scripts = ["/js/user/login.js",]
   for (const scriptSrc of scripts) {
@@ -7,17 +8,20 @@ onMounted(() => {
     script.src = scriptSrc;
     script.type = 'module';
     document.body.appendChild(script);
+    injectedScripts.push(script);
   }
 });
+onUnmounted(() => {
+  injectedScripts.forEach(script => script.remove());
+  injectedScripts.length = 0;
+});
+
+
+
 </script>
 
 <template>
   <div class="container login">
-    <div class="row justify-content-center">
-      <div class="col-md-6">
-        <LoginForm />
-      </div>
-    </div>
     <div id="form-login" class="form-signin">
       <div class="form-group">
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, onUnmounted } from 'vue';
+const injectedScripts: HTMLScriptElement[] = [];
 onMounted(() => {
   const scripts = ["/js/user/register.js",]
   for (const scriptSrc of scripts) {
@@ -7,7 +8,12 @@ onMounted(() => {
     script.src = scriptSrc;
     script.type = 'module';
     document.body.appendChild(script);
+    injectedScripts.push(script);
   }
+});
+onUnmounted(() => {
+  injectedScripts.forEach(script => script.remove());
+  injectedScripts.length = 0;
 });
 </script>
 

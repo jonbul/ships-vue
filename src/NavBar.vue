@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import "../public/css/layout.css"
 
 const isMenuOpen = ref(false);
+const injectedScripts: HTMLScriptElement[] = [];
 
 onMounted(() => {
     const scripts = ["/js/navbar.js",]
@@ -11,7 +12,12 @@ onMounted(() => {
         script.src = scriptSrc;
         script.type = 'module';
         document.body.appendChild(script);
+        injectedScripts.push(script);
     }
+});
+onUnmounted(() => {
+    injectedScripts.forEach(script => script.remove());
+    injectedScripts.length = 0;
 });
 
 </script>

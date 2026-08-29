@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import '../public/css/game.css'
-import { onMounted } from 'vue';
+import { onMounted, onUnmounted } from 'vue';
+const injectedScripts: HTMLScriptElement[] = [];
 onMounted(() => {
   const scripts = ["/js/canvas/gameStatus.js",]
   for (const scriptSrc of scripts) {
@@ -8,7 +9,12 @@ onMounted(() => {
     script.src = scriptSrc;
     script.type = 'module';
     document.body.appendChild(script);
+    injectedScripts.push(script);
   }
+});
+onUnmounted(() => {
+  injectedScripts.forEach(script => script.remove());
+  injectedScripts.length = 0;
 });
 </script>
 

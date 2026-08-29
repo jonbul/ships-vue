@@ -390,10 +390,9 @@ class Game {
         }
         const playerRealDimension = playerDied.getRealDimension();
         const explossion = getExplossionAnimation(
-            playerRealDimension.x + playerRealDimension.width / 2,
-            playerRealDimension.y + playerRealDimension.height / 2,
-            100,
-            100
+            playerRealDimension.x,
+            playerRealDimension.y,
+            playerRealDimension.width > playerRealDimension.height ? playerRealDimension.width : playerRealDimension.height
         );
         this.animations.push(explossion);
         explossion.addEndCallback(() => {
@@ -636,6 +635,10 @@ class Game {
             if (playersData[idp].socketId !== this.player.socketId) {
                 this.updatePlayers(playersData[idp]);
             } else if (this.player.credits < playersData[idp].credits) {
+                if (idp && !this.players[idp]) {
+                    console.error(`Player with id ${idp} not found`);
+                    continue;
+                }
                 this.players[idp].credits = playersData[idp].credits;
                 this.player.credits = playersData[idp].credits;
             }
@@ -660,7 +663,6 @@ class Game {
                 const blackHoleData = data.blackHoles[id];
                 if (!NPCs[id]) {
                     const bhAnimation = getBlackHoleAnimation(blackHoleData);
-                    bhAnimation.render(9);
                     bhAnimation.type = blackHoleData.type;
                     NPCs[id] = bhAnimation;
 

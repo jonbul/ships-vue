@@ -1,7 +1,7 @@
 import { Arc, Ellipse, Layer, Picture } from './canvasClasses.js';
 
 class Animation {
-    constructor({ repeat = false, maxDuration, frames = [], layer = new Layer(), x = 0, y = 0, width = 0, height = 0, speed = 1, scale = 1, onEnd }) {
+    constructor({ repeat = false, maxDuration, frames = [], layer = new Layer(), x = 0, y = 0, width = 0, height = 0, speed = 1, scale = 1, renderingReRunFrames = 1, onEnd }) {
         this.repeat = repeat;
         this.maxDuration = maxDuration;
         this.frames = frames.map(frame => frame.map(action => action.bind(this)));
@@ -20,6 +20,8 @@ class Animation {
         this.startTimestamp = null;
         this.progress = 0;
         this.scale = scale;
+        this.reRunFrames = renderingReRunFrames < 1 ? 1 : renderingReRunFrames;
+        this.render();
     }
 
     play() {
@@ -87,40 +89,84 @@ class Animation {
         return { x, y, width, height, centerX, centerY };
     }
 
-    render(reRunFrames = 1) {
+    render() {
+        if (this.rendered) return;
+
+
+        if (!this.frames || !this.frames.length) {
+            throw new Error('No frames available for rendering');
+        }
+
+        if (this.width <= 0 || this.height <= 0) {
+            throw new Error('Invalid animation size');
+        }
+
+        if (!this.reRunFrames || this.reRunFrames < 1) {
+            this.reRunFrames = 1;
+        }
+
         const offscreenCanvas = document.createElement('canvas');
         offscreenCanvas.width = this.width;
         offscreenCanvas.height = this.height;
-        const offscreenContext = offscreenCanvas.getContext('2d');
 
-        if (!reRunFrames || reRunFrames < 1) {
-            reRunFrames = 1;
+        const offscreenContext = offscreenCanvas.getContext('2d');
+        if (!offscreenContext) {
+            throw new Error('Failed to get 2D context from offscreen canvas');
         }
+
         const pictures = [];
-        for (let r = 0; r < reRunFrames; r++) {
-            for (let i = 0; i < this.frames.length; i++) {
-                const frameActions = this.frames[i];
-                if (frameActions && frameActions.length) {
-                    frameActions.forEach(action => action());
-                }
-                offscreenContext.clearRect(0, 0, this.width, this.height);
-                this.layer.draw(offscreenContext, { x: 0, y: 0, scale: 1, width: this.width, height: this.height });
-                const frameImageData = offscreenContext.getImageData(0, 0, this.width, this.height);
-                const picture = new Picture(frameImageData, null, 0, 0, this.width, this.height, 0, 0, this.width, this.height);
-                pictures.push(picture);
+
+        //for (let r = 1; r < this.reRunFrames; r++) {
+        for (let i = 0; i < this.frames.length; i++) {
+            const frameActions = this.frames[i];
+            if (frameActions && frameActions.length) {
+                frameActions.forEach(action => action());
+            }
+
+            offscreenContext.clearRect(0, 0, this.width, this.height);
+            this.layer.draw(offscreenContext, { x: 0, y: 0, scale: 1, width: this.width, height: this.height });
+
+            // Snapshot as CanvasImageSource (ImageData does not work with drawImage).
+            const frameCanvas = document.createElement('canvas');
+            frameCanvas.width = this.width;
+            frameCanvas.height = this.height;
+
+            const frameContext = frameCanvas.getContext('2d');
+            if (!frameContext) {
+                throw new Error('Failed to get 2D context from frame canvas');
+            }
+            frameContext.drawImage(offscreenCanvas, 0, 0);
+
+            const picture = new Picture(
+                frameCanvas, null,
+                0, 0, this.width, this.height,
+                0, 0, this.width, this.height
+            );
+            pictures.push(picture);
+        }
+        //}
+        const picturesLength = pictures.length;
+        for (let r = 1; r < this.reRunFrames; r++) {
+            for (let i = 0; i < picturesLength; i++) {
+                pictures.push(pictures[i]);
             }
         }
         const newFrames = pictures.map(picture => [(() => this.layer.shapes = [picture]).bind(this)]);
         this.frames = newFrames;
+        this.rendered = true;
     }
 }
 
-function getExplossionAnimation(x, y, width, height, speed = 1, onEnd) {
-    const arc1 = new Arc(0, 0, 0, '#ff0000');
-    const arc2 = new Arc(-25, -25, 0, '#ff0000');
-    const arc3 = new Arc(-25, 25, 0, '#ff0000');
-    const arc4 = new Arc(25, -25, 0, '#ff0000');
-    const arc5 = new Arc(25, 25, 0, '#ff0000');
+function getExplossionAnimation(x, y, size, speed = 1, onEnd) {
+    console.log(arguments);
+    const pos1 = size / 4;
+    const pos2 = pos1 * 2;
+    const pos3 = pos1 * 3;
+    const arc1 = new Arc(pos2, pos2, 0, '#ff0000');
+    const arc2 = new Arc(pos1, pos1, 0, '#ff0000');
+    const arc3 = new Arc(pos1, pos3, 0, '#ff0000');
+    const arc4 = new Arc(pos3, pos1, 0, '#ff0000');
+    const arc5 = new Arc(pos3, pos3, 0, '#ff0000');
     const shapes = [arc1, arc2, arc3, arc4, arc5];
     const layer = new Layer('', shapes);
     const incArc = (e, increment) => e.radius += increment;
@@ -142,7 +188,7 @@ function getExplossionAnimation(x, y, width, height, speed = 1, onEnd) {
         arc5.radius = 0;
     }
     const frames = [[restart]];
-    const increment = 1;
+    const increment = (size / 4) / 50;
 
     for (let i = 0; i < 49; i++) {
         addActionInFrame(i * 10, incArcRed.bind(null, arc1, increment));
@@ -168,8 +214,8 @@ function getExplossionAnimation(x, y, width, height, speed = 1, onEnd) {
         layer: layer,
         x,
         y,
-        width,
-        height
+        width: size,
+        height: size
     })
 }
 
@@ -284,7 +330,8 @@ function getBlackHoleAnimations(blackHoleData) {
         width: blackHoleData.maxSize,
         height: blackHoleData.maxSize,
         speed: 1,
-        scale: 2
+        scale: 2,
+        renderingReRunFrames: 9
     });
 
     const bhAnimation = getBlackHoleAnimation(blackHoleData);

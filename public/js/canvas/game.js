@@ -15,7 +15,7 @@ import {
 
 import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED, ALERT_TYPES, NPC_TYPES } from '/js/utils/constants.js';
 import { asyncRequest, showAlert } from '/js/utils/functions.js';
-import { getExplossionAnimation, getBlackHoleAnimation } from './animationClass.js';
+import { getExplossionAnimation, getBlackHoleAnimation, getBlackHoleAnimation2 } from './animationClass.js';
 import gameSounds from './gameSounds.js';
 import MessagesManager from './messagesManagerClass.js';
 
@@ -99,7 +99,7 @@ class Game {
     }
 
     runBlackHole(x, y, r = 100) {
-        const bh = getBlackHoleAnimationBase(x, y, r);
+        const bh = getBlackHoleAnimation2({ x, y, scale: 1, maxSize: 500 });
         this.animations = this.animations || [];
         this.animations.push(bh);
         bh.play();
@@ -463,24 +463,15 @@ class Game {
         const playerData = this.player.getRealDimension();
         // theorical radius
         const plRadius = getRadiusFromRect(playerData)
+
         for (const id in this.NPCs) {
             const npc = this.NPCs[id];
-            const npcData = {
-                x: npc.x,
-                y: npc.y,
-                width: npc.width * npc.scale,
-                height: npc.height * npc.scale,
-                centerX: npc.x + (npc.width * npc.scale) / 2,
-                centerY: npc.y + (npc.height * npc.scale) / 2,
-            }
-
-
             switch (npc?.type) {
                 case NPC_TYPES.BLACK_HOLE:
-                    const npcRadius = getRadiusFromRect(npc);
-                    const npcData = npc.getRealDimension();
-                    const distance = Math.sqrt(Math.pow(npcData.centerX - playerData.centerX, 2) + Math.pow(npcData.centerY - playerData.centerY, 2)) - (plRadius + npcRadius);
-                    if (distance <= 0) {
+                    const killByBlackHole = () => {
+                        console.log("distance to black hole:", centerDistance);
+
+                        const lethalDamage = this.player.life || 10;
                         this.player.life = 0;
 
                         this.ws.sendData('playerHit', {
@@ -488,14 +479,29 @@ class Game {
                             playerId: this.player.socketId,
                             from: null,
                             fromNpc: NPC_TYPES.BLACK_HOLE,
-                            bulletCharge: this.player.life
+                            bulletCharge: lethalDamage
                         });
-                    } else if (distance <= 2000) { // move player towards black hole
+                    };
+
+                    const npcData = npc.getRealDimension();
+                    const npcRadius = getRadiusFromRect(npcData);
+                    const centerDistance = Math.hypot(npcData.centerX - playerData.centerX, npcData.centerY - playerData.centerY);
+                    const edgeDistance = centerDistance - (plRadius + npcRadius);
+
+                    if (centerDistance <= 0.0001) {
+                        killByBlackHole();
+                    } else if (edgeDistance <= 2000) { // move player towards black hole
                         // jumpStep is the amount of distance to move the player towards the black hole per frame, based on the distance to the black hole. The closer the player is to the black hole, the faster they will be pulled in.
-                        const jumpStep = (1 / (distance / 1000)) * 1.25;
+                        const safeDistance = Math.max(edgeDistance, 1);
+                        const desiredJumpStep = (1000 / safeDistance) * 1.25;
+                        const jumpStep = Math.min(desiredJumpStep, centerDistance);
                         const angle = Math.atan2(npcData.centerY - playerData.centerY, npcData.centerX - playerData.centerX);
                         this.player.x += Math.cos(angle) * jumpStep;
                         this.player.y += Math.sin(angle) * jumpStep;
+
+                        if (jumpStep >= centerDistance - 0.0001) {
+                            killByBlackHole();
+                        }
                     }
                     break;
             }
@@ -635,7 +641,7 @@ class Game {
             if (playersData[idp].socketId !== this.player.socketId) {
                 this.updatePlayers(playersData[idp]);
             } else if (this.player.credits < playersData[idp].credits) {
-                if (idp && !this.players[idp]) {
+                if (!this.players[idp]) {
                     console.error(`Player with id ${idp} not found`);
                     continue;
                 }
@@ -662,7 +668,7 @@ class Game {
             for (const id in data.blackHoles) {
                 const blackHoleData = data.blackHoles[id];
                 if (!NPCs[id]) {
-                    const bhAnimation = getBlackHoleAnimation(blackHoleData);
+                    const bhAnimation = getBlackHoleAnimation2(blackHoleData);
                     bhAnimation.type = blackHoleData.type;
                     NPCs[id] = bhAnimation;
 
@@ -798,6 +804,16 @@ class Game {
                 }
             }
         }
+
+        const debugRect = new Rect(0, 0, 0, 0, '#ff000000', '#ff0000', 20);
+        for (const id in this.NPCs) {
+            const npc = this.NPCs[id];
+            debugRect.x = npc.x;
+            debugRect.y = npc.y;
+            debugRect.width = npc.width * (npc.scale || 1);
+            debugRect.height = npc.height * (npc.scale || 1);
+            debugRect.draw(this.context);
+        }/** */
 
         this.isSmartphone ? this.drawRadarSmartphone() : this.drawRadar();
 

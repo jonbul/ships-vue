@@ -1,7 +1,7 @@
 import { Arc, Ellipse, Layer, Picture } from './canvasClasses.js';
 
 class Animation {
-    constructor({ repeat = false, maxDuration, frames = [], layer = new Layer(), x = 0, y = 0, width = 0, height = 0, speed = 1, scale = 1, renderingReRunFrames = 1, onEnd }) {
+    constructor({ repeat = false, maxDuration, frames = [], layer = new Layer(), x = 0, y = 0, width = 0, height = 0, speed = 1, scale = 1, renderingReRunFrames = 1, dynamicRender = false, onEnd }) {
         this.repeat = repeat;
         this.maxDuration = maxDuration;
         this.frames = frames.map(frame => frame.map(action => action.bind(this)));
@@ -21,7 +21,10 @@ class Animation {
         this.progress = 0;
         this.scale = scale;
         this.reRunFrames = renderingReRunFrames < 1 ? 1 : renderingReRunFrames;
-        this.render();
+        this.dynamicRender = !!dynamicRender;
+        if (!this.dynamicRender) {
+            this.render();
+        }
     }
 
     play() {
@@ -219,17 +222,16 @@ function getExplossionAnimation(x, y, size, speed = 1, onEnd) {
     })
 }
 
-function getBlackHoleAnimation(blackHoleData) {
-    const { x, y, scale, maxSize } = blackHoleData;
+function getBlackHoleAnimation({ x, y, maxSize, scale = 1 }) {
     const center = maxSize / 2;
 
-    const d = (maxSize / 2 / 50);
+    const d = ((maxSize / 2) / 50);
     const r = maxSize / 2 - d * 8
 
     const transparent = '#00000000';
     const black = '#000000';
     const white = '#ffffff';
-    const shadow = '#f89500a9';
+    const shadow = '#99671ba9';
 
     const degToRad = (deg) => deg * Math.PI / 180;
 
@@ -306,36 +308,173 @@ function getBlackHoleAnimation(blackHoleData) {
     })
 }
 
-function getBlackHoleAnimations(blackHoleData) {
-
-
-    const steps = 30; // duracion visual del flash
-    const targetRadius = blackHoleData.maxSize / 2; // diametro final = 2 * maxSize
-    const inc = targetRadius / steps;
-
-    const arc = new Arc(targetRadius, targetRadius, 0, '#ffffff77');
-    const layer = new Layer('', [arc]);
-
-    const frames = [];
-    for (let i = 0; i < steps; i++) {
-        frames.push([() => { arc.radius += inc; }]); // 1 accion por frame
+function getBlackHoleAnimation2({ x, y, maxSize, scale = 1 }) {
+    function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
     }
 
-    const flashAnimation = new Animation({
-        repeat: false,
-        frames,
-        layer,
-        x: blackHoleData.x,
-        y: blackHoleData.y,
-        width: blackHoleData.maxSize,
-        height: blackHoleData.maxSize,
-        speed: 1,
-        scale: 2,
-        renderingReRunFrames: 9
+    function safeNumber(value, fallback) {
+        return Number.isFinite(value) ? value : fallback;
+    }
+
+    function createAnimationFrames(action, frameCount = 60) {
+        return Array.from({ length: frameCount }, () => [action]);
+    }
+
+    function createGravityLensShape({ size, coreRadius, pullStrength, swirlSpeed }) {
+        let phase = 0;
+        const sampleCanvas = document.createElement('canvas');
+        const sampleContext = sampleCanvas.getContext('2d');
+        const center = size / 2;
+        const lensRadius = size / 2;
+
+        function tick() {
+            phase = (phase + swirlSpeed) % (Math.PI * 2);
+        }
+
+        function drawAccretionGlow(context, cx, cy, localCoreRadius, localLensRadius) {
+            const glow = context.createRadialGradient(cx, cy, localCoreRadius * 0.8, cx, cy, localLensRadius);
+            glow.addColorStop(0, '#00000000');
+            glow.addColorStop(0.35, '#d89f4a30');
+            glow.addColorStop(0.7, '#8a59201a');
+            glow.addColorStop(1, '#00000000');
+
+            context.beginPath();
+            context.fillStyle = glow;
+            context.arc(cx, cy, localLensRadius, 0, Math.PI * 2);
+            context.fill();
+        }
+
+        function drawCore(context, cx, cy, localCoreRadius) {
+            context.beginPath();
+            context.fillStyle = '#000000';
+            context.arc(cx, cy, localCoreRadius, 0, Math.PI * 2);
+            context.fill();
+
+            context.beginPath();
+            context.strokeStyle = '#2a1608';
+            context.lineWidth = Math.max(1, localCoreRadius * 0.08);
+            context.arc(cx, cy, localCoreRadius * 1.04, 0, Math.PI * 2);
+            context.stroke();
+        }
+
+        function drawDistortion(context, cx, cy, localCoreRadius, localLensRadius) {
+            if (!sampleContext || !context || !context.canvas) {
+                return;
+            }
+
+            const captureRadius = Math.ceil(localLensRadius * 1.25);
+            const captureSize = captureRadius * 2;
+            if (captureSize <= 0) {
+                return;
+            }
+
+            if (sampleCanvas.width !== captureSize || sampleCanvas.height !== captureSize) {
+                sampleCanvas.width = captureSize;
+                sampleCanvas.height = captureSize;
+            }
+
+            sampleContext.clearRect(0, 0, captureSize, captureSize);
+            sampleContext.drawImage(
+                context.canvas,
+                cx - captureRadius,
+                cy - captureRadius,
+                captureSize,
+                captureSize,
+                0,
+                0,
+                captureSize,
+                captureSize
+            );
+
+            const rings = 18;
+            for (let ring = rings; ring >= 1; ring--) {
+                const outer = (localLensRadius * ring) / rings;
+                const inner = (localLensRadius * (ring - 1)) / rings;
+                if (outer <= localCoreRadius * 0.9) {
+                    continue;
+                }
+
+                const t = 1 - outer / localLensRadius;
+                const warpScale = 1 - pullStrength * (t * t + 0.1);
+                const swirlOffset = Math.sin(phase + ring * 0.45) * (t * localLensRadius * 0.08);
+                const sourceRadius = Math.max(inner + 1, outer * warpScale);
+                const sourceX = clamp(captureRadius - sourceRadius + swirlOffset, 0, captureSize - sourceRadius * 2);
+                const sourceY = clamp(captureRadius - sourceRadius - swirlOffset, 0, captureSize - sourceRadius * 2);
+
+                context.save();
+                context.beginPath();
+                context.arc(cx, cy, outer, 0, Math.PI * 2);
+                context.arc(cx, cy, inner, 0, Math.PI * 2, true);
+                context.clip();
+
+                context.globalAlpha = 0.12 + t * 0.32;
+                context.drawImage(
+                    sampleCanvas,
+                    sourceX,
+                    sourceY,
+                    sourceRadius * 2,
+                    sourceRadius * 2,
+                    cx - outer,
+                    cy - outer,
+                    outer * 2,
+                    outer * 2
+                );
+                context.restore();
+            }
+        }
+
+        return {
+            draw(context, options = { x: 0, y: 0, scale: 1 }) {
+                const shapeScale = safeNumber(options.scale, 1);
+                const cx = safeNumber(options.x, 0) + center * shapeScale;
+                const cy = safeNumber(options.y, 0) + center * shapeScale;
+                const localCoreRadius = coreRadius * shapeScale;
+                const localLensRadius = lensRadius * shapeScale;
+
+                drawDistortion(context, cx, cy, localCoreRadius, localLensRadius);
+                drawAccretionGlow(context, cx, cy, localCoreRadius, localLensRadius);
+                drawCore(context, cx, cy, localCoreRadius);
+            },
+            drawResized(context) {
+                this.draw(context, { x: 0, y: 0, scale: 1 });
+            },
+            tick,
+        };
+    }
+
+    const resolvedMaxSize = Math.max(40, safeNumber(maxSize, 300));
+    const resolvedScale = Math.max(0.05, safeNumber(scale, 1));
+    const coreRadius = resolvedMaxSize * 0.19;
+    const pullStrength = 0.42;
+    const swirlSpeed = 0.06;
+
+    const gravityLensShape = createGravityLensShape({
+        size: resolvedMaxSize,
+        coreRadius,
+        pullStrength,
+        swirlSpeed,
     });
 
-    const bhAnimation = getBlackHoleAnimation(blackHoleData);
-    return [flashAnimation, bhAnimation];
+    function blackHoleFrame2() {
+        gravityLensShape.tick();
+    }
+
+    const frames = createAnimationFrames(blackHoleFrame2, 72);
+    const layer = new Layer('', [gravityLensShape]);
+
+    return new Animation({
+        frames,
+        layer,
+        x,
+        y,
+        width: resolvedMaxSize,
+        height: resolvedMaxSize,
+        repeat: true,
+        speed: 1,
+        scale: resolvedScale,
+        dynamicRender: true,
+    });
 }
 
-export { getExplossionAnimation, getBlackHoleAnimation };
+export { getExplossionAnimation, getBlackHoleAnimation, getBlackHoleAnimation2 };

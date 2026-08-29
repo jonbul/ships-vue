@@ -7,7 +7,7 @@ onMounted(() => {
   const scripts = ["/js/paintingBoard/paintingBoard.js",]
   for (const scriptSrc of scripts) {
     const script = document.createElement('script');
-    script.src = scriptSrc;
+    script.src = `${scriptSrc}?t=${Date.now()}`;
     script.type = 'module';
     document.body.appendChild(script);
     injectedScripts.push(script);

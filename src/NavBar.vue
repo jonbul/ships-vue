@@ -9,7 +9,7 @@ onMounted(() => {
     const scripts = ["/js/navbar.js",]
     for (const scriptSrc of scripts) {
         const script = document.createElement('script');
-        script.src = scriptSrc;
+        script.src = `${scriptSrc}?t=${Date.now()}`;
         script.type = 'module';
         document.body.appendChild(script);
         injectedScripts.push(script);
@@ -25,41 +25,41 @@ onUnmounted(() => {
 <template>
     <nav id="mainNavbar">
         <!-- vue -->
-        <a class="mainNavbar-brand" href="#">JAES</a>
+        <RouterLink class="mainNavbar-brand" to="/">JAES</RouterLink>
         <button class="navbar-button" type="button" data-toggle="collapse" data-target="#navbarNav"
             aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             &#9776;
         </button>
         <ul class="navbarMenu collapsable" id="navbarMenu">
             <li class="nav-item">
-                <a class="nav-link" href="/">Home</a>
+                <RouterLink class="nav-link" to="/">Home</RouterLink>
             </li>
             <li class="nav-item">
-                <a class="nav-link" href="/game">Game</a>
+                <RouterLink class="nav-link" to="/game">Game</RouterLink>
             </li>
             <li class="nav-item logged">
-                <a class="nav-link" href="/paintingBoard/projects">Painting Projects</a>
+                <RouterLink class="nav-link" to="/paintingBoard/projects">Painting Projects</RouterLink>
             </li>
             <li class="nav-item logged admin">
-                <a class="nav-link" href="/game/status">GameStatus</a>
+                <RouterLink class="nav-link" to="/game/status">GameStatus</RouterLink>
             </li>
             <li class="nav-item logged admin">
-                <a class="nav-link" href="/game/admin">Admin</a>
+                <RouterLink class="nav-link" to="/game/admin">Admin</RouterLink>
             </li>
         </ul>
         <ul class="navbarMenu" id="navbarMenuRight">
             <li class="nav-item nologged">
-                <a href="/login" class="nav-link">Login</a>
+                <RouterLink to="/login" class="nav-link">Login</RouterLink>
             </li>
             <li class="nav-item nologged">
-                <a href="/register" class="nav-link">Register</a>
+                <RouterLink to="/register" class="nav-link">Register</RouterLink>
             </li>
 
             <li class="nav-item logged profile">
-                <a href="/profile" class="nav-link" alt="Profile">
+                <RouterLink to="/profile" class="nav-link">
                     👤
                     <span name="username"></span>
-                </a>
+                </RouterLink>
             </li>
             <li class="nav-item logged">
                 <a class="nav-link" id="logoutLink">Logout</a>

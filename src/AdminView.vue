@@ -18,15 +18,14 @@ onMounted(() => {
 
       <div class="form-group">
         <label for="resolution" class="">Resolution</label>
-        <select type="text" id="resolution" class="form-control" required="true" autofocus="true" name="resolution"
-          value="">
+        <select id="resolution" class="form-control" required="true" autofocus="true" name="resolution" value="">
 
         </select>
       </div>
 
       <div class="form-group">
         <label for="allowedPlayerType" class="">Players allowed</label>
-        <select type="text" id="allowedPlayerType" class="form-control" required="true" name="allowedPlayerType">
+        <select id="allowedPlayerType" class="form-control" required="true" name="allowedPlayerType">
 
         </select>
       </div>

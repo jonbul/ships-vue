@@ -21,7 +21,7 @@ onMounted(() => {
     <div id="form-login" class="form-signin">
       <div class="form-group">
 
-        <h1 class="h3 mb-3 font-weight-normal mt-5">Please sign in</h1>
+        <h1 class="h3 mb-3 font-weight-normal mt-5">Sign in</h1>
 
         <div class="form-group">
           <label for="inputEmail" class="sr-only">Email address</label>

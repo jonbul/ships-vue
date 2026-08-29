@@ -14,7 +14,7 @@ onMounted(() => {
 <template>
   <div class="container register">
     <div class="form-register" id="form-register">
-      <h1 class="h3 mb-3 font-weight-normal">Please sign in</h1>
+      <h1 class="h3 mb-3 font-weight-normal">Register</h1>
 
       <div class="form-group">
         <label for="username" class="">User Name</label>

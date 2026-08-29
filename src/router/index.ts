@@ -33,7 +33,8 @@ const router = createRouter({
     {path: '/register', name: 'register', component: RegisterView},
     {path: '/paintingBoard/projects', name: 'projects', component: ProjectsView, meta: {requiresAuth: true}},
     {path: '/paintingBoard', name: 'paintingBoard', component: PaintingBoardView, meta: {requiresAuth: true}},
-    {path: '/game/admin', name: 'admin', component: AdminView, meta: {requiresAdmin: true}}
+    {path: '/game/admin', name: 'admin', component: AdminView, meta: {requiresAdmin: true}},
+    {path: '/:pathMatch(.*)*', redirect: '/'}
   ],
 })
 

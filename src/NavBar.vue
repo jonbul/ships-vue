@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import "../public/css/layout.css"
 
-const isMenuOpen = ref(false);
 const injectedScripts: HTMLScriptElement[] = [];
+
+function closeMenu() {
+    const menu = document.getElementById('navbarMenu')
+    if (menu) menu.removeAttribute('collapsed-expanded')
+}
 
 onMounted(() => {
     const scripts = ["/js/navbar.js",]
@@ -32,19 +36,19 @@ onUnmounted(() => {
         </button>
         <ul class="navbarMenu collapsable" id="navbarMenu">
             <li class="nav-item">
-                <RouterLink class="nav-link" to="/">Home</RouterLink>
+                <RouterLink class="nav-link" to="/" @click="closeMenu">Home</RouterLink>
             </li>
             <li class="nav-item">
-                <RouterLink class="nav-link" to="/game">Game</RouterLink>
+                <RouterLink class="nav-link" to="/game" @click="closeMenu">Game</RouterLink>
             </li>
             <li class="nav-item logged">
-                <RouterLink class="nav-link" to="/paintingBoard/projects">Painting Projects</RouterLink>
+                <RouterLink class="nav-link" to="/paintingBoard/projects" @click="closeMenu">Painting Projects</RouterLink>
             </li>
             <li class="nav-item logged admin">
-                <RouterLink class="nav-link" to="/game/status">GameStatus</RouterLink>
+                <RouterLink class="nav-link" to="/game/status" @click="closeMenu">GameStatus</RouterLink>
             </li>
             <li class="nav-item logged admin">
-                <RouterLink class="nav-link" to="/game/admin">Admin</RouterLink>
+                <RouterLink class="nav-link" to="/game/admin" @click="closeMenu">Admin</RouterLink>
             </li>
         </ul>
         <ul class="navbarMenu" id="navbarMenuRight">

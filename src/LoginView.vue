@@ -1,27 +1,31 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, onUnmounted } from 'vue';
+const injectedScripts: HTMLScriptElement[] = [];
 onMounted(() => {
   const scripts = ["/js/user/login.js",]
   for (const scriptSrc of scripts) {
     const script = document.createElement('script');
-    script.src = scriptSrc;
+    script.src = `${scriptSrc}?t=${Date.now()}`;
     script.type = 'module';
     document.body.appendChild(script);
+    injectedScripts.push(script);
   }
 });
+onUnmounted(() => {
+  injectedScripts.forEach(script => script.remove());
+  injectedScripts.length = 0;
+});
+
+
+
 </script>
 
 <template>
   <div class="container login">
-    <div class="row justify-content-center">
-      <div class="col-md-6">
-        <LoginForm />
-      </div>
-    </div>
     <div id="form-login" class="form-signin">
       <div class="form-group">
 
-        <h1 class="h3 mb-3 font-weight-normal mt-5">Please sign in</h1>
+        <h1 class="h3 mb-3 font-weight-normal mt-5">Sign in</h1>
 
         <div class="form-group">
           <label for="inputEmail" class="sr-only">Email address</label>
@@ -42,7 +46,7 @@ onMounted(() => {
         </div>
 
         <button class="btn btn-lg btn-primary btn-block" type="button" id="btnLogin">Login</button>
-        <span>Don't have an account? <a href="/register">Register here</a></span>
+        <span>Don't have an account? <RouterLink to="/register">Register here</RouterLink></span>
       </div>
     </div>
   </div>

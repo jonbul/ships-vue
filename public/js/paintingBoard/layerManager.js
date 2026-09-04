@@ -20,6 +20,7 @@ class LayerManager {
         document.body.addEventListener('mousemove', layersManagerMouseMove.bind(this));
         //this.layersManagerDiv.addEventListener('mouseleave', layersManagerMouseUp.bind(this));
         document.getElementById("btnAddLayer").addEventListener('click', this.addNewLayer.bind(this));
+        document.getElementById("btnBgColor").addEventListener('click', this.setBgColor.bind(this));
         this.shapePropertiesTable.addEventListener('input', editShapeProperty.bind(this));
         document.querySelectorAll('.window .closeButton').forEach(btn => {
             btn.addEventListener('click', closeWindow.bind(this, btn.parentElement.parentElement));

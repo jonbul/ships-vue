@@ -1,6 +1,13 @@
 CHANGES
 =======
-- Version metadata.properties ---
+Version 1.1.0 - 2026-09-04
+------------------
+- Black hole
+    [X] Appears when an event is received
+    [X] Disappears after a time elapsed
+    [X] Moves through the map
+    [X] Affects other players
+    [X] Kills players on contact
 
 Version 1.0.2 - 2026-08-09
 ------------------

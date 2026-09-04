@@ -5,10 +5,10 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     vue(),
-    vueDevTools(),
+    mode === 'development' && vueDevTools(),
   ],
   resolve: {
     alias: {
@@ -23,4 +23,4 @@ export default defineConfig({
       cert: fs.readFileSync('./ssl/cert.pem'),
     } : undefined,
   }
-})
+}))

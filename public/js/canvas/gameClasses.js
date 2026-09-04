@@ -40,23 +40,9 @@ class Player {
         this.calculateScale();
     }
 
-    draw_old(context) {
-        if (this.hide) return;
-        const rotationCenter = { x: this.ship.width / 2, y: this.ship.height / 2 };
-        const layerOptions = {
-            x: this.x + this.xTranslation,
-            y: this.y + this.yTranslation,
-            rotate: this.rotate,
-            rotationCenter,
-            scale: this.scale
-        };
-
-        for (const layer of this.layers) {
-            layer.draw(context, layerOptions);
-        }
-        this.nameShape.x = layerOptions.x;
-        this.nameShape.y = layerOptions.y - 20;
-        this.nameShape.draw(context, { x: 0, y: 0 });
+    setPosition(x, y) {
+        this.x = x;
+        this.y = y;
     }
 
     /**
@@ -64,7 +50,6 @@ class Player {
      * @param {CanvasRenderingContext2D} context 
      */
     draw(context) {
-
         if (this.hide) return;
         const realDimension = this.getRealDimension();
         const rotationCenter = { x: realDimension.width / 2, y: realDimension.height / 2 };
@@ -167,11 +152,17 @@ class Player {
      * @returns {Object} An object containing the real dimensions of the player's ship, including the x and y position adjusted for translation, and the real width and height based on the current scale. This is used for accurate collision detection and drawing calculations.
      */
     getRealDimension() {
+        const x = this.x + (this.xTranslation || 0);
+        const y = this.y + (this.yTranslation || 0);
+        const width = this.realWidth || this.width;
+        const height = this.realHeight || this.height;
         return {
-            x: this.x + (this.xTranslation || 0),
-            y: this.y + (this.yTranslation || 0),
-            width: this.realWidth || this.width,
-            height: this.realHeight || this.height
+            x,
+            y,
+            width,
+            height,
+            centerX: x + width / 2,
+            centerY: y + height / 2
         }
     }
 
@@ -213,9 +204,13 @@ class Player {
     }
 
     getDistanceToPlayer(player) {
-        const xLength = this.x - player.x;
-        const yLength = this.y - player.y;
-        return Math.sqrt(Math.pow(xLength, 2) + Math.pow(yLength, 2));
+        const a = this.getRealDimension();
+        const b = player.getRealDimension();
+        const ax = a.x + a.width / 2;
+        const ay = a.y + a.height / 2;
+        const bx = b.x + b.width / 2;
+        const by = b.y + b.height / 2;
+        return Math.hypot(ax - bx, ay - by);
     }
 
     getCenteredPosition() {
@@ -354,7 +349,7 @@ class RadarArrow {
         const xLength = (target.x + target.width / 2) - (player.x + player.width / 2);
         const yLength = (target.y + target.height / 2) - (player.y + player.height / 2);
 
-        this.totalDistance = Math.sqrt(xLength ^ 2 + yLength ^ 2);
+        this.totalDistance = Math.hypot(xLength, yLength);
 
         if (xLength > 0 && yLength > 0) {
             this.angleRadian = Math.abs(Math.atan(yLength / xLength));

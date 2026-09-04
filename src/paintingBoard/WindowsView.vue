@@ -18,7 +18,7 @@ import '/public/css/paintingBoard/windows.css'
       <br>
       <div id="toolList">
 
-        <input id="toolRect" type="radio" name="action" value="Rect" checked="true">
+        <input id="toolRect" type="radio" name="action" value="Rect" checked>
         <label for="toolRect" aria-label="Rectangle" title="Rectangle">&#8414;</label>
         <br>
 
@@ -83,14 +83,13 @@ import '/public/css/paintingBoard/windows.css'
               A<input type="range" id="colorAlpha" min="0" max="1" value="1" step="0.01" /><br>
             </td>
             <td id="colorResult" style="width: 20px; cursor: pointer">
-              <input type="color" id="backgroundColor" alpha />
+              <input type="color" id="backgroundColor" />
             </td>
           </tr>
         </tbody>
       </table>
       <input type="color" id="borderColor" />
       <input type="Number" id="borderWidth" min="0" value="1" style="width: 50px;" />Border Width<br>
-      <input type="Button" id="btnBgColor" value="Set BackGround Color" style="width:100%;" onclick="setBgColor()" />
     </span>
   </span>
   <!--LAYERS-->

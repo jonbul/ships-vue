@@ -25,8 +25,12 @@ export default class MessagesManager {
     }
 
     addKillMessage(name1, name2) {
-        const killword = KILLWORDS[parseInt(Math.random() * KILLWORDS.length)];
-        this.add(`☠ ${name1} HAS ${killword} ${name2}`)
+        if (name1 && name2) {
+            const killword = KILLWORDS[parseInt(Math.random() * KILLWORDS.length)];
+            this.add(`☠ ${name1} HAS ${killword} ${name2}`)
+        } else if (name2) {
+            this.add(`☠ ${name2} HAS BEEN DESTROYED`);
+        }
     }
 
     getColor(alpha) {

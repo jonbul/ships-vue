@@ -13,9 +13,9 @@ import {
     Player
 } from './gameClasses.js';
 
-import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED, ALERT_TYPES } from '/js/utils/constants.js';
+import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED, ALERT_TYPES, NPC_TYPES } from '/js/utils/constants.js';
 import { asyncRequest, showAlert } from '/js/utils/functions.js';
-import { getExplossionAnimation, getBlackHoleAnimation } from './animationClass.js';
+import { getBlackHoleExplossionAnimation, getExplossionAnimation2, getBlackHoleAnimation2 } from './animationClass.js';
 import gameSounds from './gameSounds.js';
 import MessagesManager from './messagesManagerClass.js';
 
@@ -35,6 +35,7 @@ class Game {
         this.ship = ship;
         this.backgroundCards = [];
         this.players = {};
+        this.NPCs = {};
         this.bullets = {};
         this.keys = [];
         this.shipsManager = shipsManager;
@@ -46,11 +47,16 @@ class Game {
 
         this.createStaticCanvas();
 
+        this.wsQueue = [];
+        this.wsConnecting = false;
+        this.reconnectAttempts = 0;
+
         // Wait for connection
         let tryCount = 0;
         const connectWebSocket = () => {
+            this.wsConnecting = true;
             try {
-                this.ws = new WebSocket(websocketHost);
+                this.createNewWebSocket();
             } catch (error) {
                 console.error('WebSocket connection failed:', error);
                 if (tryCount < 5) {
@@ -70,16 +76,37 @@ class Game {
             }
         }
         connectWebSocket();
+
+
+
+        setInterval(() => {
+            if (this.wsConnecting) return;
+            if (this.wsQueue.length > 0 && this.ws.readyState === WebSocket.OPEN) {
+                const now = Date.now();
+                const messageList = this.wsQueue.splice(0, this.wsQueue.length)
+                    .filter(i => {
+                        if (i.eventName === 'playerData' && now > i.ts + 1000) {
+                            return false;
+                        }
+                        return true;
+                    });
+
+                if (messageList.length) {
+                    this.ws.send(JSON.stringify(messageList));
+                }
+            }
+        }, 10);
     }
 
     runBlackHole(x, y, r = 100) {
-        const bh = getBlackHoleAnimation(x, y, r);
+        const bh = getBlackHoleAnimation2({ x, y, scale: 1, maxSize: 500 });
         this.animations = this.animations || [];
         this.animations.push(bh);
         bh.play();
     }
 
     async onWebSocketOpen() {
+        this.wsConnecting = false;
         const tempPlayers = (await asyncRequest({ path: '/game/getPlayers', method: 'GET' }));
         for (const id in tempPlayers) {
             this.updatePlayers(tempPlayers[id]);
@@ -97,8 +124,7 @@ class Game {
         this.drawableBullets = new Layer('bullets');
         this.drawablePlayers = [];
         do {
-            this.player.x = parseInt(Math.random() * this.canvas.width - this.player.width);
-            this.player.y = parseInt(Math.random() * this.canvas.height - this.player.height);
+            this.player.setPosition(parseInt(Math.random() * this.canvas.width - this.player.width), parseInt(Math.random() * this.canvas.height - this.player.height));
         } while (this.checkCollisionsWithPlayers());
         const tX = this.canvas.width / 2 - this.player.width / 2 - this.player.x;
         const tY = this.canvas.height / 2 - this.player.height / 2 - this.player.y;
@@ -115,41 +141,77 @@ class Game {
         const y = this.player.y;
 
         do {
-            this.player.x = parseInt(Math.random() * this.canvas.width - this.player.width);
-            this.player.y = parseInt(Math.random() * this.canvas.height - this.player.height);
+            this.player.setPosition(parseInt(Math.random() * this.canvas.width - this.player.width), parseInt(Math.random() * this.canvas.height - this.player.height));
         } while (this.checkCollisionsWithPlayers());
 
         this.context.translate(x - this.player.x, y - this.player.y);
     }
 
-    _reconnect() {
+    createNewWebSocket() {
+        this.ws = new WebSocket(websocketHost);
+        this.ws.addEventListener('close', (event) => {
+            const MAX_ATTEMPTS = 10;
+            const DELAY_MS = 50;
+            console.warn('⚠️ Disconnected:', event.code, event.reason);
+
+            if (this.reconnectAttempts < MAX_ATTEMPTS) {
+                setTimeout(this._reconnect.bind(this), DELAY_MS);
+            } else {
+                console.error('❌ All reconnection attempts failed');
+                showAlert({ msg: 'Failed to reconnect. Please reload the page.', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
+                setTimeout(() => location.reload(), 5000);
+            }
+        });
+    }
+
+    _reconnect(callback) {
         const MAX_ATTEMPTS = 10;
-        const DELAY_MS = 2000;
-        let attempts = 0;
+        const DELAY_MS = 50;
 
-        const tryConnect = () => {
-            attempts++;
-            console.log(`🔄 Reconnecting... Attempt ${attempts}`);
-            showAlert({ msg: `Reconnecting... Attempt ${attempts}`, title: 'Info', type: ALERT_TYPES.INFO, duration: 2000 });
-            this.ws = new WebSocket(websocketHost);
-            this.ws.addEventListener('open', () => {
-                console.log('✅ Reconnected. Reloading...');
-                location.reload();
-            });
-            this.ws.addEventListener('close', () => {
-                if (attempts < MAX_ATTEMPTS) {
-                    setTimeout(tryConnect, DELAY_MS);
+        //const tryConnect = () => {
+        this.reconnectAttempts++;
+        console.log(`🔄 Reconnecting... Attempt ${this.reconnectAttempts}`);
+        showAlert({ msg: `Reconnecting... Attempt ${this.reconnectAttempts}`, title: 'Info', type: ALERT_TYPES.INFO, duration: 2000 });
+        try {
+            this.createNewWebSocket();
+
+            if (this.ws.readyState === WebSocket.CONNECTING) {
+                if (this.intervalRunning) {
+                    this.ws.addEventListener('open', () => {
+                        this.socketIOEvents();
+                        this.runCallBackValidating(callback);
+                    });
                 } else {
-                    console.error('❌ All reconnection attempts failed');
-                    showAlert({ msg: 'Failed to reconnect. Please reload the page.', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
+                    this.ws.addEventListener('open', () => {
+                        this.onWebSocketOpen();
+                        this.runCallBackValidating(callback);
+                    });
                 }
-            });
-        };
+            } else if (this.ws.readyState === WebSocket.OPEN) {
+                if (this.intervalRunning) {
+                    this.socketIOEvents();
+                } else {
+                    this.onWebSocketOpen();
+                }
+                this.runCallBackValidating(callback);
+            }
+        } catch (error) {
+            if (this.reconnectAttempts < MAX_ATTEMPTS) {
+                setTimeout(this._reconnect.bind(this, callback), DELAY_MS);
+            } else {
+                console.error('❌ All reconnection attempts failed');
+                showAlert({ msg: 'Failed to reconnect. Please reload the page.', title: 'Error', type: ALERT_TYPES.DANGER, duration: 5000 });
+                setTimeout(() => location.reload(), 5000);
+            }
+        }
+    }
 
-        setTimeout(tryConnect, DELAY_MS);
+    runCallBackValidating(callback) {
+        if (callback && typeof callback === 'function') callback.bind(this)();
     }
 
     socketIOEvents() {
+        this.reconnectAttempts = 0;
         this.ws.events = {};
 
         this.ws.addEventListener('message', event => {
@@ -167,7 +229,17 @@ class Game {
 
         this.ws.sendData = (function (eventName, data) {
             data = data || {};
-            this.ws.send(JSON.stringify({ ...data, eventName }));
+            this.wsQueue.push({ ...data, eventName, ts: Date.now() });
+            /*try {
+                if (this.ws.readyState === WebSocket.OPEN) {
+                    //this.ws.send(JSON.stringify({ ...data, eventName }));
+                    
+                } else {
+                    this._reconnect();
+                }
+            } catch (error) {
+                console.error('Failed to send data:', error);
+            }*/
         }).bind(this);
 
         this.ws.on('gameBroadcast', this.gameBroadcast.bind(this));
@@ -208,7 +280,7 @@ class Game {
                     data.cards[x][y].stars.forEach(star => {
                         shapes.push(new Arc(
                             star.x + conX * this.canvas.width,
-                            star.y + conY * this.canvas.height,
+                            star.y + conY * this.canvas.width,
                             star.r,
                             '#ffffff'
                         ))
@@ -219,6 +291,7 @@ class Game {
                     )
                 }
             }
+            this.requestingBackgroundCards = false;
         })
 
         // ✅ Manage connection events
@@ -233,52 +306,52 @@ class Game {
             location.reload();
         });
 
-        this.ws.addEventListener('close', (event) => {
-            console.warn('⚠️ Disconnected:', event.code, event.reason);
-            this._reconnect();
-        });
-
         this.ws.on('connectionSuccess', data => {
             console.log('✅ Connection established with socket ID:', data.socketId);
             this.socketId = data.socketId;
             this.player.socketId = data.socketId;
             this.players[this.player.socketId] = this.player;
+
+            this.beginInterval();
         });
 
         this.ws.sendData('connectionSuccess');
 
         this.playerUpdated = true;
-        this.beginInterval();
-        setTimeout(() => {
-            this.ws.sendData('playerData', this.player.getSortDetails());
-        }, 1);
     }
 
     beginInterval() {
+        if (this.intervalRunning) return;
         const timestep = 1000 / 30; // 30 updates per second (fixed timestep)
         let lastTime = null;
         let accumulator = 0;
         const loop = (timestamp) => {
-            if (lastTime === null) {
+            try {
+                if (lastTime === null) {
+                    lastTime = timestamp;
+                }
+
+                let delta = timestamp - lastTime;
                 lastTime = timestamp;
-            }
 
-            let delta = timestamp - lastTime;
-            lastTime = timestamp;
+                // Clamp delta to avoid spiral-of-death after long pauses or tab switches
+                if (delta > 100) {
+                    delta = 100;
+                }
+                accumulator += delta;
+                // Run the fixed-timestep game updates
+                while (accumulator >= timestep) {
+                    this.intervalMethod();
+                    accumulator -= timestep;
+                }
 
-            // Clamp delta to avoid spiral-of-death after long pauses or tab switches
-            if (delta > 100) {
-                delta = 100;
-            }
-            accumulator += delta;
-            // Run the fixed-timestep game updates
-            while (accumulator >= timestep) {
-                this.intervalMethod();
-                accumulator -= timestep;
+            } catch (error) {
+                console.error('Error in game loop:', error);
             }
             requestAnimationFrame(loop);
         };
         requestAnimationFrame(loop);
+        this.intervalRunning = true;
     }
 
     toFullScreen(e) {
@@ -306,34 +379,47 @@ class Game {
     }
 
     onPlayerDied(msg) {
-        this.players[msg.playerId].deaths++;
-        this.players[msg.from].kills++;
-        this.players[msg.playerId].calculateScale();
-        this.players[msg.from].calculateScale();
-        const playerRealDimension = this.players[msg.playerId].getRealDimension();
-        const explossion = getExplossionAnimation(
-            playerRealDimension.x + playerRealDimension.width / 2,
-            playerRealDimension.y + playerRealDimension.height / 2,
-            100,
-            100
+        const playerDied = this.player.socketId == msg.playerId ? this.player : this.players[msg.playerId];
+        const killer = this.players[msg.from];
+        playerDied.deaths++;
+        playerDied.calculateScale();
+
+        if (killer) {
+            killer.kills++;
+            killer.calculateScale();
+        }
+        const playerRealDimension = playerDied.getRealDimension();
+        const killedByEnemyShot = !!msg.from && msg.from !== playerDied.socketId && !msg.fromNpc;
+        const explossionFactory = killedByEnemyShot ? getExplossionAnimation2 : getBlackHoleExplossionAnimation;
+        const explossion = explossionFactory(
+            playerRealDimension.x,
+            playerRealDimension.y,
+            playerRealDimension.width > playerRealDimension.height ? playerRealDimension.width : playerRealDimension.height
         );
         this.animations.push(explossion);
+        explossion.addEndCallback(() => {
+            const index = this.animations.indexOf(explossion);
+            if (index !== -1) {
+                this.animations.splice(index, 1);
+            }
+        });
         explossion.play();
         gameSounds.explosion();
 
-        const fromName = this.players[msg.from].name;
-        const diedName = this.players[msg.playerId].name;
+        const fromName = killer ? killer.name : null;
+        const diedName = playerDied.name;
         this.messagesManager.addKillMessage(fromName, diedName);
     }
 
     intervalMethod() {
 
+        this.applyNpcImpacts();
         if (this.isSmartphone) {
             this.movementSmarphone();
-            //this.movement();
         } else {
             this.movement();
         }
+
         this.bulletInterval();
 
         this.viewRect = {
@@ -367,6 +453,67 @@ class Game {
             this.ws.sendData('playerData', this.player.getSortDetails());
         }
         this.playerUpdated = false;
+    }
+
+    applyNpcImpacts() {
+        if (this.player.isDead) return;
+        const tempPosition = {
+            x: this.player.x,
+            y: this.player.y
+        }
+
+        const playerData = this.player.getRealDimension();
+        // theorical radius
+        const plRadius = getRadiusFromRect(playerData)
+
+        for (const id in this.NPCs) {
+            const npc = this.NPCs[id];
+            switch (npc?.type) {
+                case NPC_TYPES.BLACK_HOLE:
+                    const killByBlackHole = () => {
+                        console.log("distance to black hole:", centerDistance);
+
+                        const lethalDamage = this.player.life || 10;
+                        this.player.life = 0;
+
+                        this.ws.sendData('playerHit', {
+                            bulletId: null,
+                            playerId: this.player.socketId,
+                            from: null,
+                            fromNpc: NPC_TYPES.BLACK_HOLE,
+                            bulletCharge: lethalDamage
+                        });
+                    };
+
+                    const npcData = npc.getRealDimension();
+                    const npcRadius = getRadiusFromRect(npcData);
+                    const centerDistance = Math.hypot(npcData.centerX - playerData.centerX, npcData.centerY - playerData.centerY);
+                    const edgeDistance = centerDistance - (plRadius + npcRadius);
+
+                    if (centerDistance <= 0.0001) {
+                        killByBlackHole();
+                    } else if (edgeDistance <= 2000) { // move player towards black hole
+                        // jumpStep is the amount of distance to move the player towards the black hole per frame, based on the distance to the black hole. The closer the player is to the black hole, the faster they will be pulled in.
+                        const safeDistance = Math.max(edgeDistance, 1);
+                        const desiredJumpStep = (1000 / safeDistance) * 1.25;
+                        const jumpStep = Math.min(desiredJumpStep, centerDistance);
+                        const angle = Math.atan2(npcData.centerY - playerData.centerY, npcData.centerX - playerData.centerX);
+                        this.player.x += Math.cos(angle) * jumpStep;
+                        this.player.y += Math.sin(angle) * jumpStep;
+
+                        if (jumpStep >= centerDistance - 0.0001) {
+                            killByBlackHole();
+                        }
+                    }
+                    break;
+            }
+        }
+        this.player.setPosition(Math.round(this.player.x * 100) / 100, Math.round(this.player.y * 100) / 100);
+
+        const moveX = tempPosition.x - this.player.x;
+        const moveY = tempPosition.y - this.player.y;
+
+        this.context.translate(moveX, moveY);
     }
 
     clear() {
@@ -419,18 +566,16 @@ class Game {
                 break;
         }
 
-        player.x += moveX;
-        player.y += moveY;
+        const x = Math.round((player.x + moveX) * 100) / 100;
+        const y = Math.round((player.y + moveY) * 100) / 100;
 
-        player.x = Math.round(player.x * 100) / 100;
-        player.y = Math.round(player.y * 100) / 100;
+        player.setPosition(x, y);
 
         if (player.speed || this.keys[KEYS.LEFT] || this.keys[KEYS.RIGHT]) {
             if (!this.checkCollisionsWithPlayers()) {
                 this.context.translate(-moveX, -moveY);
             } else {
-                player.x = tempPosition.x;
-                player.y = tempPosition.y;
+                player.setPosition(tempPosition.x, tempPosition.y);
             }
         }
     }
@@ -480,18 +625,13 @@ class Game {
                 break;
         }
 
-        player.x += moveX;
-        player.y += moveY;
-
-        player.x = Math.round(player.x * 100) / 100;
-        player.y = Math.round(player.y * 100) / 100;
+        player.setPosition(Math.round((player.x + moveX) * 100) / 100, Math.round((player.y + moveY) * 100) / 100);
 
         if (player.speed || this.keys[KEYS.LEFT] || this.keys[KEYS.RIGHT]) {
             if (!this.checkCollisionsWithPlayers()) {
                 this.context.translate(-moveX, -moveY);
             } else {
-                player.x = tempPosition.x;
-                player.y = tempPosition.y;
+                player.setPosition(tempPosition.x, tempPosition.y);
             }
         }
     }
@@ -503,6 +643,10 @@ class Game {
             if (playersData[idp].socketId !== this.player.socketId) {
                 this.updatePlayers(playersData[idp]);
             } else if (this.player.credits < playersData[idp].credits) {
+                if (!this.players[idp]) {
+                    console.error(`Player with id ${idp} not found`);
+                    continue;
+                }
                 this.players[idp].credits = playersData[idp].credits;
                 this.player.credits = playersData[idp].credits;
             }
@@ -517,6 +661,39 @@ class Game {
         for (const idp in this.players) {
             if (!data.activePlayerIds.includes(idp)) {
                 delete this.players[idp];
+            }
+        }
+
+        if (data.blackHoles) {
+            const NPCs = this.NPCs;
+            const animations = this.animations;
+            for (const id in data.blackHoles) {
+                const blackHoleData = data.blackHoles[id];
+                if (!NPCs[id]) {
+                    const bhAnimation = getBlackHoleAnimation2(blackHoleData);
+                    bhAnimation.type = blackHoleData.type;
+                    NPCs[id] = bhAnimation;
+
+                    bhAnimation.play();
+                    animations.push(bhAnimation);
+                } else { // update NPC position
+                    const npc = NPCs[id];
+                    npc.x = blackHoleData.x;
+                    npc.y = blackHoleData.y;
+                    npc.scale = blackHoleData.scale;
+                }
+            }
+
+            for (const id in NPCs) {
+                if (!data.blackHoles[id]) {
+                    const bhAnimation = NPCs[id];
+                    delete NPCs[id];
+                    bhAnimation.stop();
+                    const index = animations.indexOf(bhAnimation);
+                    if (index !== -1) {
+                        animations.splice(index, 1);
+                    }
+                }
             }
         }
 
@@ -550,8 +727,7 @@ class Game {
                 players[socketId] = new Player(this.shipsManager.getShipById(plDetails.shipId), plDetails.name, plDetails.shipId);
                 players[socketId].socketId = socketId;
             }
-            players[socketId].x = plDetails.x;
-            players[socketId].y = plDetails.y;
+            players[socketId].setPosition(plDetails.x, plDetails.y);
             players[socketId].rotate = plDetails.rotate;
             players[socketId].hide = plDetails.hide;
             players[socketId].isDead = plDetails.isDead;
@@ -560,6 +736,7 @@ class Game {
     }
 
     drawAll() {
+
         this.clear();
         let translateX;
         let translateY;
@@ -573,14 +750,27 @@ class Game {
             this.context.translate(-translateX, -translateY)
         }
         this.drawBackground();
+
+        if (!this.player.isDead) {
+            this.player.draw(this.context);
+        }
+
         this.drawableBullets.draw(this.context);
         for (let p of this.drawablePlayers) {
-            p.draw(this.context);
+            if (!p.isDead) {
+                p.draw(this.context);
+            }
+        }
+        for (let id in this.NPCs) {
+            const npc = this.NPCs[id];
+            if (npc?.draw) npc.draw(this.context);
+            // new Rect(npc.x, npc.y, npc.width * npc.scale, npc.height * npc.scale, 'rgba(0, 0, 0, 0)', '#ff0000', 2).draw(this.context);
         }
 
         this.animations.forEach(anim => {
             if (anim.playing) {
                 anim.drawFrame(this.context, this.checkRectsCollision(anim, this.viewRect));
+                //new Rect(anim.x, anim.y, anim.width * anim.scale, anim.height * anim.scale, null, '#ff0000', 2).draw(this.context);
             }
         });
         this.drawArrows();
@@ -617,6 +807,16 @@ class Game {
             }
         }
 
+        /*const debugRect = new Rect(0, 0, 0, 0, '#ff000000', '#ff0000', 20);
+        for (const id in this.NPCs) {
+            const npc = this.NPCs[id];
+            debugRect.x = npc.x;
+            debugRect.y = npc.y;
+            debugRect.width = npc.width * (npc.scale || 1);
+            debugRect.height = npc.height * (npc.scale || 1);
+            debugRect.draw(this.context);
+        }/** */
+
         this.isSmartphone ? this.drawRadarSmartphone() : this.drawRadar();
 
         this.drawTexts();
@@ -624,10 +824,11 @@ class Game {
 
     drawBackground() {
         const playerRealDimension = this.player.getRealDimension();
+        const cardSize = this.canvas.width;
         // Math.floor maneja correctamente coordenadas negativas
         const currentCard = {
-            x: Math.floor(playerRealDimension.x / this.canvas.width),
-            y: Math.floor(playerRealDimension.y / this.canvas.height)
+            x: Math.floor(playerRealDimension.x / cardSize),
+            y: Math.floor(playerRealDimension.y / cardSize)
         }
 
         const n = 2;
@@ -652,15 +853,15 @@ class Game {
 
         if (!this.background) {
             this.background = new Rect(
-                this.canvas.width * (currentCard.x - n),
-                this.canvas.height * (currentCard.y - n),
-                this.canvas.width * (n * 2 + 1),
-                this.canvas.height * (n * 2 + 1),
+                cardSize * (currentCard.x - n),
+                cardSize * (currentCard.y - n),
+                cardSize * (n * 2 + 1),
+                cardSize * (n * 2 + 1),
                 '#1c2773'
             )
         }
-        this.background.x = this.canvas.width * (currentCard.x - n)
-        this.background.y = this.canvas.height * (currentCard.y - n)
+        this.background.x = cardSize * (currentCard.x - n)
+        this.background.y = cardSize * (currentCard.y - n)
         this.background.draw(this.context);
 
         for (let dx = -1; dx <= 1; dx++) {
@@ -670,8 +871,8 @@ class Game {
                 if (this.backgroundCards[cacheX]?.[cacheY]?.draw) {
                     this.backgroundCards[cacheX][cacheY].draw(this.context, {
                         // offset = posición mundo - posición almacenada en los Arc
-                        x: this.canvas.width * (currentCard.x + dx - cacheX),
-                        y: this.canvas.height * (currentCard.y + dy - cacheY)
+                        x: cardSize * (currentCard.x + dx - cacheX),
+                        y: cardSize * (currentCard.y + dy - cacheY)
                     });
                 }
             }
@@ -1060,6 +1261,10 @@ class Game {
             height: (arc.radiusY || arc.radius) * 2
         });
     }
+}
+
+function getRadiusFromRect(rect) {
+    return Math.sqrt(Math.pow(rect.width / 2, 2) + Math.pow(rect.height / 2, 2));
 }
 
 export default Game;

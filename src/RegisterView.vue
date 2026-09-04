@@ -1,20 +1,26 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, onUnmounted } from 'vue';
+const injectedScripts: HTMLScriptElement[] = [];
 onMounted(() => {
   const scripts = ["/js/user/register.js",]
   for (const scriptSrc of scripts) {
     const script = document.createElement('script');
-    script.src = scriptSrc;
+    script.src = `${scriptSrc}?t=${Date.now()}`;
     script.type = 'module';
     document.body.appendChild(script);
+    injectedScripts.push(script);
   }
+});
+onUnmounted(() => {
+  injectedScripts.forEach(script => script.remove());
+  injectedScripts.length = 0;
 });
 </script>
 
 <template>
   <div class="container register">
     <div class="form-register" id="form-register">
-      <h1 class="h3 mb-3 font-weight-normal">Please sign in</h1>
+      <h1 class="h3 mb-3 font-weight-normal">Register</h1>
 
       <div class="form-group">
         <label for="username" class="">User Name</label>
@@ -38,7 +44,7 @@ onMounted(() => {
       </div>
 
       <button class="btn btn-lg btn-primary btn-block" type="button" id="register">Register</button>
-      <span class="ml-auto">Already have an account? <a href="/login">Login here</a></span>
+      <span class="ml-auto">Already have an account? <RouterLink to="/login">Login here</RouterLink></span>
     </div>
   </div>
 </template>

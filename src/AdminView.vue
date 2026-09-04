@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, onUnmounted } from 'vue';
+const injectedScripts: HTMLScriptElement[] = [];
 onMounted(() => {
   const scripts = ["/js/canvas/admin.js",]
   for (const scriptSrc of scripts) {
     const script = document.createElement('script');
-    script.src = scriptSrc;
+    script.src = `${scriptSrc}?t=${Date.now()}`;
     script.type = 'module';
     document.body.appendChild(script);
+    injectedScripts.push(script);
   }
+});
+onUnmounted(() => {
+  injectedScripts.forEach(script => script.remove());
+  injectedScripts.length = 0;
 });
 </script>
 
@@ -18,15 +24,14 @@ onMounted(() => {
 
       <div class="form-group">
         <label for="resolution" class="">Resolution</label>
-        <select type="text" id="resolution" class="form-control" required="true" autofocus="true" name="resolution"
-          value="">
+        <select id="resolution" class="form-control" required autofocus name="resolution" value="">
 
         </select>
       </div>
 
       <div class="form-group">
         <label for="allowedPlayerType" class="">Players allowed</label>
-        <select type="text" id="allowedPlayerType" class="form-control" required="true" name="allowedPlayerType">
+        <select id="allowedPlayerType" class="form-control" required name="allowedPlayerType">
 
         </select>
       </div>

@@ -1,9 +1,6 @@
 CHANGES
 =======
-- Version {metadata.properties} - 2026-XX-XX
-------------------
-
-Version 1.1.0 - 2026-08-XX
+Version 1.1.0 - 2026-09-04
 ------------------
 - Black hole
     [X] Appears when an event is received

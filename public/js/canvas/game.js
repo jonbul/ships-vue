@@ -21,6 +21,14 @@ import MessagesManager from './messagesManagerClass.js';
 
 const backendHost = (window.location.host.substring(0, window.location.host.indexOf(':')) || window.location.host) + ':3000';
 const websocketHost = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + backendHost + '/ws';
+// Ramming: how much damage/how often touching another ship (a real player
+// or an enemy Ship NPC - both are rendered/collided with identically) hurts
+// the player.
+const SHIP_RAM_DAMAGE = 2;
+const SHIP_RAM_COOLDOWN_MS = 800;
+// Outgoing message queue length past which superseded playerData snapshots
+// are dropped, so a long disconnect can't grow it without limit.
+const WS_QUEUE_PRUNE_AT = 200;
 
 class Game {
     constructor(canvas, username, credits, isSmartphone, ship, shipsManager) {
@@ -79,7 +87,8 @@ class Game {
 
 
 
-        setInterval(() => {
+        this.wsFlushInterval = setInterval(() => {
+            if (this.destroyed) return;
             if (this.wsConnecting) return;
             if (this.wsQueue.length > 0 && this.ws.readyState === WebSocket.OPEN) {
                 const now = Date.now();
@@ -152,6 +161,7 @@ class Game {
         this.ws.addEventListener('close', (event) => {
             const MAX_ATTEMPTS = 10;
             const DELAY_MS = 50;
+            if (this.destroyed) return; // we closed it on purpose
             console.warn('⚠️ Disconnected:', event.code, event.reason);
 
             if (this.reconnectAttempts < MAX_ATTEMPTS) {
@@ -167,6 +177,7 @@ class Game {
     _reconnect(callback) {
         const MAX_ATTEMPTS = 10;
         const DELAY_MS = 50;
+        if (this.destroyed) return;
 
         //const tryConnect = () => {
         this.reconnectAttempts++;
@@ -230,16 +241,16 @@ class Game {
         this.ws.sendData = (function (eventName, data) {
             data = data || {};
             this.wsQueue.push({ ...data, eventName, ts: Date.now() });
-            /*try {
-                if (this.ws.readyState === WebSocket.OPEN) {
-                    //this.ws.send(JSON.stringify({ ...data, eventName }));
-                    
-                } else {
-                    this._reconnect();
-                }
-            } catch (error) {
-                console.error('Failed to send data:', error);
-            }*/
+            // The queue is only drained while the socket is open, but this
+            // is called ~30x/s regardless, so a long disconnect would grow
+            // it without limit (and then flush one huge payload). playerData
+            // messages are whole-state snapshots where only the newest one
+            // matters - the flush below already drops those older than 1s -
+            // so prune them here too once the queue gets unreasonably long.
+            if (this.wsQueue.length > WS_QUEUE_PRUNE_AT) {
+                const now = Date.now();
+                this.wsQueue = this.wsQueue.filter(i => i.eventName !== 'playerData' || now <= i.ts + 1000);
+            }
         }).bind(this);
 
         this.ws.on('gameBroadcast', this.gameBroadcast.bind(this));
@@ -326,6 +337,10 @@ class Game {
         let lastTime = null;
         let accumulator = 0;
         const loop = (timestamp) => {
+            // The loop reschedules itself forever, so without this the whole
+            // Game (canvases, players, bullets, its websocket) would stay
+            // alive and keep rendering after leaving the view - see destroy().
+            if (this.destroyed) return;
             try {
                 if (lastTime === null) {
                     lastTime = timestamp;
@@ -348,10 +363,46 @@ class Game {
             } catch (error) {
                 console.error('Error in game loop:', error);
             }
-            requestAnimationFrame(loop);
+            this.animationFrame = requestAnimationFrame(loop);
         };
-        requestAnimationFrame(loop);
+        this.animationFrame = requestAnimationFrame(loop);
         this.intervalRunning = true;
+    }
+
+    /**
+     * Tears the game down completely. Everything started in the constructor
+     * keeps running on its own otherwise (a self-rescheduling
+     * requestAnimationFrame loop, the websocket flush interval, the socket
+     * itself and listeners on document/window), none of which is reachable
+     * from the DOM. Leaving and re-entering the game view therefore stacked
+     * a fully live Game instance per visit - each still rendering, still
+     * holding its canvases/players/bullets, and still holding an open
+     * connection that ships-go counts as a player.
+     */
+    destroy() {
+        if (this.destroyed) return;
+        this.destroyed = true;
+        this.intervalRunning = false;
+
+        if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
+        if (this.wsFlushInterval) clearInterval(this.wsFlushInterval);
+
+        this.boundEvents.forEach(([target, type, handler]) => target.removeEventListener(type, handler));
+        this.boundEvents = [];
+
+        try {
+            this.ws?.close();
+        } catch (error) {
+            console.error('Error closing websocket on destroy:', error);
+        }
+
+        this.animations = [];
+        this.bullets = {};
+        this.players = {};
+        this.NPCs = {};
+        this.wsQueue = [];
+        this.backgroundCards = [];
+        if (window.game === this) delete window.game;
     }
 
     toFullScreen(e) {
@@ -379,10 +430,14 @@ class Game {
     }
 
     onPlayerDied(msg) {
-        const playerDied = this.player.socketId == msg.playerId ? this.player : this.players[msg.playerId];
+        const playerDied = this.player.socketId == msg.playerId ? this.player : (this.players[msg.playerId] || this.NPCs[msg.playerId]);
+        if (!playerDied) return;
         const killer = this.players[msg.from];
-        playerDied.deaths++;
-        playerDied.calculateScale();
+        const isNpc = playerDied.type === NPC_TYPES.SHIP;
+        if (!isNpc) {
+            playerDied.deaths++;
+            playerDied.calculateScale();
+        }
 
         if (killer) {
             killer.kills++;
@@ -439,7 +494,15 @@ class Game {
         for (const id in this.bullets) {
             const bullet = this.bullets[id];
             bullet.moveStep();
-            if (this.socketId === bullet.socketId && bullet.isExpired()) {
+            // Every bullet expires locally, whoever fired it. isExpired()
+            // is pure geometry derived from the newBullet data every client
+            // receives, so all clients agree without any extra traffic.
+            // Only expiring our own leaked every bullet anyone else ever
+            // fired and missed with: they were removed solely by an
+            // explicit removeBullet event, which is sent by a *hit* player,
+            // so a missed shot stayed in this.bullets forever - growing
+            // memory and per-frame moveStep() work for the whole session.
+            if (bullet.isExpired()) {
                 delete this.bullets[id];
             } else if (this.checkArcRectCollision(bullet, this.viewRect)) {
                 this.drawableBullets.shapes.push(bullet);
@@ -508,12 +571,102 @@ class Game {
                     break;
             }
         }
+
+        this.checkShipBodyCollision(playerData);
+        this.checkEnemyBulletsHittingSelf(playerData);
+
         this.player.setPosition(Math.round(this.player.x * 100) / 100, Math.round(this.player.y * 100) / 100);
 
         const moveX = tempPosition.x - this.player.x;
         const moveY = tempPosition.y - this.player.y;
 
         this.context.translate(moveX, moveY);
+    }
+
+    /**
+     * Ships have no shared server-side physics, so ramming another ship
+     * (a real player, or an enemy Ship NPC - rendered as a Player too, so
+     * it's handled the exact same way) is detected purely client-side: each
+     * client is only ever responsible for pushing/damaging itself, which
+     * naturally resolves symmetrically since every client runs this same
+     * check. On overlap: push the player back out along the axis of least
+     * penetration (so it can't sit inside the other ship), and apply
+     * capped-rate ram damage via the existing playerHit event/handler (same
+     * one used by bullets and black holes - bulletId is null, same
+     * convention as black hole hits, since there's no real bullet
+     * involved). `fromNpc` is only set when the other ship is an NPC, so
+     * kill-credit/animation logic in onPlayerDied still tells them apart.
+     */
+    checkShipBodyCollision(playerData) {
+        if (this.player.isDead) return;
+        const targets = [];
+        for (const id in this.players) {
+            const other = this.players[id];
+            // this.players also holds an entry for the local player itself
+            // (see checkCollisionsWithPlayers); colliding with it would mean
+            // permanently overlapping a copy of yourself.
+            if (other === this.player || other.socketId === this.player.socketId) continue;
+            if (!other.isDead && !other.hide) targets.push([id, other]);
+        }
+        for (const id in this.NPCs) {
+            const npc = this.NPCs[id];
+            if (npc?.type === NPC_TYPES.SHIP) targets.push([id, npc]);
+        }
+
+        for (const [id, other] of targets) {
+            const otherData = other.getRealDimension();
+            const overlapX = Math.min(playerData.x + playerData.width, otherData.x + otherData.width) - Math.max(playerData.x, otherData.x);
+            const overlapY = Math.min(playerData.y + playerData.height, otherData.y + otherData.height) - Math.max(playerData.y, otherData.y);
+            if (overlapX <= 0 || overlapY <= 0) continue;
+
+            if (overlapX < overlapY) {
+                const pushDir = playerData.centerX < otherData.centerX ? -1 : 1;
+                this.player.x += pushDir * overlapX;
+            } else {
+                const pushDir = playerData.centerY < otherData.centerY ? -1 : 1;
+                this.player.y += pushDir * overlapY;
+            }
+
+            this.shipRamHitAt = this.shipRamHitAt || {};
+            const lastHit = this.shipRamHitAt[id] || 0;
+            const now = Date.now();
+            if (now - lastHit < SHIP_RAM_COOLDOWN_MS) continue;
+            this.shipRamHitAt[id] = now;
+
+            const isNpc = other.type === NPC_TYPES.SHIP;
+            this.ws.sendData('playerHit', {
+                bulletId: null,
+                playerId: this.player.socketId,
+                from: id,
+                ...(isNpc ? { fromNpc: NPC_TYPES.SHIP } : {}),
+                bulletCharge: SHIP_RAM_DAMAGE
+            });
+        }
+    }
+
+    /**
+     * Enemy Ship NPCs shoot bullets the same way a player does (see
+     * ships-npc), broadcast via the regular newBullet/gameBroadcast
+     * mechanism. Nobody "owns" these client-side, so each client is
+     * responsible for detecting whether it personally got hit, exactly
+     * like it already is for its own outgoing bullets vs. other players.
+     */
+    checkEnemyBulletsHittingSelf(playerData) {
+        if (this.player.isDead) return;
+        for (const id in this.bullets) {
+            const bullet = this.bullets[id];
+            const npc = this.NPCs[bullet.socketId];
+            if (!npc || npc.type !== NPC_TYPES.SHIP) continue;
+            if (!this.checkArcRectCollision(bullet, playerData)) continue;
+
+            this.ws.sendData('playerHit', {
+                bulletId: bullet.id,
+                playerId: this.player.socketId,
+                from: bullet.socketId,
+                bulletCharge: bullet.bulletCharge
+            });
+            delete this.bullets[bullet.id];
+        }
     }
 
     clear() {
@@ -670,26 +823,40 @@ class Game {
             for (const id in data.npcs) {
                 const npcData = data.npcs[id];
                 if (!NPCs[id]) {
-                    const bhAnimation = getBlackHoleAnimation2(npcData);
-                    bhAnimation.type = npcData.type;
-                    NPCs[id] = bhAnimation;
+                    if (npcData.type === NPC_TYPES.SHIP) {
+                        const enemyShip = new Player(this.shipsManager.getShipById(npcData.shipId), npcData.name || 'Enemy', npcData.shipId, npcData.x, npcData.y);
+                        enemyShip.type = npcData.type;
+                        enemyShip.socketId = id;
+                        enemyShip.rotate = npcData.rotate || 0;
+                        enemyShip.life = npcData.life;
+                        enemyShip.maxLife = npcData.maxLife;
+                        NPCs[id] = enemyShip;
+                    } else {
+                        const bhAnimation = getBlackHoleAnimation2(npcData);
+                        bhAnimation.type = npcData.type;
+                        NPCs[id] = bhAnimation;
 
-                    bhAnimation.play();
-                    animations.push(bhAnimation);
+                        bhAnimation.play();
+                        animations.push(bhAnimation);
+                    }
                 } else { // update NPC position
                     const npc = NPCs[id];
                     npc.x = npcData.x;
                     npc.y = npcData.y;
                     npc.scale = npcData.scale;
+                    if (npcData.type === NPC_TYPES.SHIP) {
+                        npc.rotate = npcData.rotate;
+                        npc.life = npcData.life;
+                    }
                 }
             }
 
             for (const id in NPCs) {
                 if (!data.npcs[id]) {
-                    const bhAnimation = NPCs[id];
+                    const npc = NPCs[id];
                     delete NPCs[id];
-                    bhAnimation.stop();
-                    const index = animations.indexOf(bhAnimation);
+                    if (npc.stop) npc.stop();
+                    const index = animations.indexOf(npc);
                     if (index !== -1) {
                         animations.splice(index, 1);
                     }
@@ -732,6 +899,26 @@ class Game {
             players[socketId].hide = plDetails.hide;
             players[socketId].isDead = plDetails.isDead;
             players[socketId].credits = plDetails.credits;
+
+            // Kills/deaths drive both the scoreboard and the ship's size
+            // (calculateScale). Tracking them only through the playerDied
+            // events we happen to witness means a client that joins later
+            // sees everyone at their default size with a zeroed score, so
+            // the broadcast values are taken into account too.
+            // They only ever grow, so keeping the highest of the two
+            // sources avoids flickering back a step when we witness a kill
+            // before its owner's next state update reflects it (a
+            // disconnected player is dropped from this.players entirely, so
+            // a reconnection starts from a fresh Player anyway).
+            // calculateScale() re-renders the ship's picture, so it's only
+            // called when the score actually moved.
+            const kills = Math.max(plDetails.kills || 0, players[socketId].kills);
+            const deaths = Math.max(plDetails.deaths || 0, players[socketId].deaths);
+            if (kills !== players[socketId].kills || deaths !== players[socketId].deaths) {
+                players[socketId].kills = kills;
+                players[socketId].deaths = deaths;
+                players[socketId].calculateScale();
+            }
         }
     }
 
@@ -939,8 +1126,15 @@ class Game {
         // radar scope in game units
         const radarScope = this.canvas.width * (10 / this.radarZoom);
         this.radarPoints = [];
+        const radarTargets = [];
         for (const id in this.players) {
-            const target = this.players[id];
+            radarTargets.push(this.players[id]);
+        }
+        for (const id in this.NPCs) {
+            const npc = this.NPCs[id];
+            if (npc?.type === NPC_TYPES.SHIP) radarTargets.push(npc);
+        }
+        for (const target of radarTargets) {
             if (this.player !== target && !target.isDead) {
                 const xLength = target.x - player.x;
                 const yLength = target.y - player.y;
@@ -1084,18 +1278,28 @@ class Game {
     }
 
     loadEvents() {
-        document.body.addEventListener('keydown', this.keyDownEvent.bind(this));
-        document.body.addEventListener('keyup', this.keyUpEvent.bind(this));
-        window.addEventListener('blur', this.leaveWindow.bind(this));
-        this.canvas.addEventListener('dblclick', this.toFullScreen.bind(this))
+        // Tracked so destroy() can detach them: they live on document/window,
+        // so they'd otherwise keep this Game (and everything it references)
+        // alive for the rest of the page's life.
+        this.boundEvents = [];
+        const listen = (target, type, handler) => {
+            const bound = handler.bind(this);
+            target.addEventListener(type, bound);
+            this.boundEvents.push([target, type, bound]);
+        };
+
+        listen(document.body, 'keydown', this.keyDownEvent);
+        listen(document.body, 'keyup', this.keyUpEvent);
+        listen(window, 'blur', this.leaveWindow);
+        listen(this.canvas, 'dblclick', this.toFullScreen);
         if (this.isSmartphone) {
 
-            document.body.addEventListener('touchstart', this.screenTouchEventStart.bind(this));
-            document.body.addEventListener('touchend', this.screenTouchEventEnd.bind(this));
+            listen(document.body, 'touchstart', this.screenTouchEventStart);
+            listen(document.body, 'touchend', this.screenTouchEventEnd);
 
-            addEventListener("deviceorientation", (e) => {
-                this.deviceorientation = e
-            })
+            listen(window, 'deviceorientation', function (e) {
+                this.deviceorientation = e;
+            });
         }
     }
 
@@ -1179,22 +1383,37 @@ class Game {
                 delete this.player.bullets[bullet.id];
                 bulletsUpdated = true;
                 return false;
-            } else {
-                const playerHit = this.checkBulletCollision(bullet);
-                if (playerHit) {
-                    this.ws.sendData('playerHit', {
-                        bulletId: bullet.id,
-                        playerId: playerHit.socketId,
-                        from: this.player.socketId,
-                        bulletCharge: bullet.bulletCharge
-                    });
-                    delete this.player.bullets[bullet.id];
-                    bulletsUpdated = true;
-                    return false;
-                } else {
-                    return true;
-                }
             }
+
+            const playerHit = this.checkBulletCollision(bullet);
+            if (playerHit) {
+                this.ws.sendData('playerHit', {
+                    bulletId: bullet.id,
+                    playerId: playerHit.socketId,
+                    from: this.player.socketId,
+                    bulletCharge: bullet.bulletCharge
+                });
+                delete this.player.bullets[bullet.id];
+                bulletsUpdated = true;
+                return false;
+            }
+
+            const npcHit = this.checkEnemyShipBulletCollision(bullet);
+            if (npcHit) {
+                this.ws.sendData('npcHit', {
+                    npcId: npcHit.id,
+                    bulletId: bullet.id,
+                    from: this.player.socketId,
+                    bulletCharge: bullet.bulletCharge,
+                    x: bullet.x,
+                    y: bullet.y
+                });
+                delete this.player.bullets[bullet.id];
+                bulletsUpdated = true;
+                return false;
+            }
+
+            return true;
         });
         return bulletsUpdated;
     }
@@ -1214,6 +1433,24 @@ class Game {
             }
         }
         return playerKilled;
+    }
+
+    /**
+     * Checks the local player's own outgoing bullet against every Ship NPC
+     * (destructible enemy ships). Mirrors checkBulletCollision, but against
+     * this.NPCs instead of this.players - the shooter's client is
+     * authoritative for its own bullets either way.
+     * @returns {object|undefined} the id-bearing NPC that got hit, if any.
+     */
+    checkEnemyShipBulletCollision(bullet) {
+        for (const id in this.NPCs) {
+            const npc = this.NPCs[id];
+            if (npc?.type !== NPC_TYPES.SHIP) continue;
+            const npcRealDimension = npc.getRealDimension();
+            const collision = bullet.x > npcRealDimension.x && bullet.x < npcRealDimension.x + npcRealDimension.width && bullet.y > npcRealDimension.y && bullet.y < npcRealDimension.y + npcRealDimension.height;
+            if (collision) return { id, ...npc };
+        }
+        return undefined;
     }
 
     /**

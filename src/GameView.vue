@@ -13,6 +13,11 @@ onMounted(() => {
   }
 });
 onUnmounted(() => {
+  // Removing the <script> element does not stop anything it already
+  // started: the Game runs a self-rescheduling requestAnimationFrame loop,
+  // an interval and a websocket, none of them reachable from the DOM. Every
+  // visit to this view would otherwise leave a whole live Game behind.
+  (window as unknown as { game?: { destroy?: () => void } }).game?.destroy?.();
   injectedScripts.forEach(script => script.remove());
   injectedScripts.length = 0;
 });

@@ -664,28 +664,28 @@ class Game {
             }
         }
 
-        if (data.blackHoles) {
+        if (data.npcs) {
             const NPCs = this.NPCs;
             const animations = this.animations;
-            for (const id in data.blackHoles) {
-                const blackHoleData = data.blackHoles[id];
+            for (const id in data.npcs) {
+                const npcData = data.npcs[id];
                 if (!NPCs[id]) {
-                    const bhAnimation = getBlackHoleAnimation2(blackHoleData);
-                    bhAnimation.type = blackHoleData.type;
+                    const bhAnimation = getBlackHoleAnimation2(npcData);
+                    bhAnimation.type = npcData.type;
                     NPCs[id] = bhAnimation;
 
                     bhAnimation.play();
                     animations.push(bhAnimation);
                 } else { // update NPC position
                     const npc = NPCs[id];
-                    npc.x = blackHoleData.x;
-                    npc.y = blackHoleData.y;
-                    npc.scale = blackHoleData.scale;
+                    npc.x = npcData.x;
+                    npc.y = npcData.y;
+                    npc.scale = npcData.scale;
                 }
             }
 
             for (const id in NPCs) {
-                if (!data.blackHoles[id]) {
+                if (!data.npcs[id]) {
                     const bhAnimation = NPCs[id];
                     delete NPCs[id];
                     bhAnimation.stop();

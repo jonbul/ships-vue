@@ -1,5 +1,11 @@
 CHANGES
 =======
+Version 1.2.0 - 2026-09-XX
+------------------
+- Adapted to backend `gameBroadcast` payload change: NPCs are now sent
+  under `npcs` instead of `blackHoles` (backend NPC logic moved to the new
+  `ships-npc` service, no visible gameplay change).
+
 Version 1.1.0 - 2026-09-04
 ------------------
 - Black hole

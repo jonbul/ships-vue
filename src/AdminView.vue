@@ -65,6 +65,12 @@ onUnmounted(() => {
         <small class="form-text text-muted">Delay between shots. Lower is deadlier.</small>
       </div>
 
+      <div class="form-group form-check">
+        <input id="enemyShipsFightEachOther" class="form-check-input" type="checkbox" />
+        <label class="form-check-label" for="enemyShipsFightEachOther">Enemy ships attack each other</label>
+        <small class="form-text text-muted">Enemy ships also hunt and shoot each other, going for whichever target is nearest. Off means they only ever attack players.</small>
+      </div>
+
       <div class="form-group">
         <label for="maxBlackHoles">Max black holes</label>
         <input id="maxBlackHoles" class="form-control" type="number" min="0" max="50" step="1" />

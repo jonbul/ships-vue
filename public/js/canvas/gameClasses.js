@@ -197,6 +197,14 @@ class Player {
             hide: this.hide,
             isDead: this.isDead,
             scale: this.scale,
+            // The ship's raw size. shipId alone is not enough for anyone
+            // else to know it: /game/getShips only lists the *public*
+            // ships, so a player flying one of their own painting projects
+            // is a ship nobody else can measure. ships-npc needs the real
+            // numbers to aim at the middle of this ship rather than at a
+            // guess (see ships-npc/CHANGES.md 1.0.0).
+            width: this.width,
+            height: this.height,
             socketId: this.socketId,
             xTranslation: this.xTranslation,
             yTranslation: this.yTranslation
@@ -413,8 +421,15 @@ class ShipsManager {
         return this.ships;
     }
 
+    // A client only knows the generic ships plus its *own* custom ones, so
+    // any other player flying a custom ship has a shipId that is missing
+    // here. Returning undefined made `new Player(...)` throw on
+    // `ship.layers`, which aborted whatever was running - including the
+    // initial updatePlayers() pass, leaving the game with no local player
+    // at all. Fall back to a generic hull so an unknown ship is merely
+    // drawn wrong instead of breaking the session.
     getShipById(shipId) {
-        return this.shipsById[shipId];
+        return this.shipsById[shipId] || this.getGenericShips()[0] || this.ships[0];
     }
 
     getGenericShips() {

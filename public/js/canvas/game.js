@@ -44,6 +44,10 @@ class Game {
         this.backgroundCards = [];
         this.players = {};
         this.NPCs = {};
+        // Last ram-damage timestamp per entity id. Pruned alongside
+        // this.players/this.NPCs (see pruneRamCooldowns) so a long session
+        // with respawning NPCs doesn't accumulate an entry per id ever seen.
+        this.shipRamHitAt = {};
         this.bullets = {};
         this.keys = [];
         this.shipsManager = shipsManager;
@@ -107,13 +111,6 @@ class Game {
         }, 10);
     }
 
-    runBlackHole(x, y, r = 100) {
-        const bh = getBlackHoleAnimation2({ x, y, scale: 1, maxSize: 500 });
-        this.animations = this.animations || [];
-        this.animations.push(bh);
-        bh.play();
-    }
-
     async onWebSocketOpen() {
         this.wsConnecting = false;
         const tempPlayers = (await asyncRequest({ path: '/game/getPlayers', method: 'GET' }));
@@ -142,7 +139,6 @@ class Game {
         this.messagesManager = new MessagesManager(this);
         this.socketIOEvents();
 
-        //this.runBlackHole(this.player.x, this.player.y, 300);
     }
 
     reloadPlayer() {
@@ -250,6 +246,15 @@ class Game {
             if (this.wsQueue.length > WS_QUEUE_PRUNE_AT) {
                 const now = Date.now();
                 this.wsQueue = this.wsQueue.filter(i => i.eventName !== 'playerData' || now <= i.ts + 1000);
+                // Everything else (hits, bullets) has no such snapshot
+                // semantics, so if the queue is still over the limit the
+                // oldest entries are dropped outright. Without this the
+                // filter above would run on every push while the queue kept
+                // growing, and the eventual flush would replay seconds-old
+                // damage retroactively.
+                if (this.wsQueue.length > WS_QUEUE_PRUNE_AT) {
+                    this.wsQueue = this.wsQueue.slice(-WS_QUEUE_PRUNE_AT);
+                }
             }
         }).bind(this);
 
@@ -400,6 +405,7 @@ class Game {
         this.bullets = {};
         this.players = {};
         this.NPCs = {};
+        this.shipRamHitAt = {};
         this.wsQueue = [];
         this.backgroundCards = [];
         if (window.game === this) delete window.game;
@@ -432,14 +438,19 @@ class Game {
     onPlayerDied(msg) {
         const playerDied = this.player.socketId == msg.playerId ? this.player : (this.players[msg.playerId] || this.NPCs[msg.playerId]);
         if (!playerDied) return;
-        const killer = this.players[msg.from];
+        // The killer may be an enemy Ship NPC, which lives in this.NPCs
+        // rather than this.players - without this its kill would show up as
+        // an anonymous "HAS BEEN DESTROYED" instead of naming it.
+        const killer = this.players[msg.from] || this.NPCs[msg.from];
         const isNpc = playerDied.type === NPC_TYPES.SHIP;
         if (!isNpc) {
             playerDied.deaths++;
             playerDied.calculateScale();
         }
 
-        if (killer) {
+        // Only real players have a scoreboard/scale that grows with kills;
+        // an NPC's size is owned by ships-npc, so leave it alone.
+        if (killer && killer.type !== NPC_TYPES.SHIP) {
             killer.kills++;
             killer.calculateScale();
         }
@@ -525,12 +536,16 @@ class Game {
             y: this.player.y
         }
 
-        const playerData = this.player.getRealDimension();
-        // theorical radius
-        const plRadius = getRadiusFromRect(playerData)
+        // Recomputed on every iteration below, because a black hole pull
+        // moves the player mid-loop and the next NPC must be measured
+        // against where the player actually is now.
+        let playerData = this.player.getRealDimension();
+        let plRadius = getRadiusFromRect(playerData);
 
         for (const id in this.NPCs) {
             const npc = this.NPCs[id];
+            playerData = this.player.getRealDimension();
+            plRadius = getRadiusFromRect(playerData);
             switch (npc?.type) {
                 case NPC_TYPES.BLACK_HOLE:
                     const killByBlackHole = () => {
@@ -572,8 +587,10 @@ class Game {
             }
         }
 
-        this.checkShipBodyCollision(playerData);
-        this.checkEnemyBulletsHittingSelf(playerData);
+        this.checkShipBodyCollision(this.player.getRealDimension());
+        // Recomputed again: checkShipBodyCollision pushes the player out of
+        // any ship it was overlapping.
+        this.checkEnemyBulletsHittingSelf(this.player.getRealDimension());
 
         this.player.setPosition(Math.round(this.player.x * 100) / 100, Math.round(this.player.y * 100) / 100);
 
@@ -597,8 +614,15 @@ class Game {
      * involved). `fromNpc` is only set when the other ship is an NPC, so
      * kill-credit/animation logic in onPlayerDied still tells them apart.
      */
+    pruneRamCooldowns() {
+        for (const id in this.shipRamHitAt) {
+            if (!this.players[id] && !this.NPCs[id]) delete this.shipRamHitAt[id];
+        }
+    }
+
     checkShipBodyCollision(playerData) {
         if (this.player.isDead) return;
+        this.pruneRamCooldowns();
         const targets = [];
         for (const id in this.players) {
             const other = this.players[id];
@@ -614,6 +638,13 @@ class Game {
         }
 
         for (const [id, other] of targets) {
+            // Recomputed every iteration: the push below moves the player, and
+            // so does the black-hole pull that runs before this function. The
+            // caller's rectangle is stale as soon as either happens, and
+            // measuring penetration from the wrong place makes the pushes add
+            // up across an overlapping fleet - shoving the player straight
+            // through a ship, or jittering between two opposing resolutions.
+            playerData = this.player.getRealDimension();
             const otherData = other.getRealDimension();
             const overlapX = Math.min(playerData.x + playerData.width, otherData.x + otherData.width) - Math.max(playerData.x, otherData.x);
             const overlapY = Math.min(playerData.y + playerData.height, otherData.y + otherData.height) - Math.max(playerData.y, otherData.y);
@@ -627,7 +658,6 @@ class Game {
                 this.player.y += pushDir * overlapY;
             }
 
-            this.shipRamHitAt = this.shipRamHitAt || {};
             const lastHit = this.shipRamHitAt[id] || 0;
             const now = Date.now();
             if (now - lastHit < SHIP_RAM_COOLDOWN_MS) continue;
@@ -796,12 +826,11 @@ class Game {
             if (playersData[idp].socketId !== this.player.socketId) {
                 this.updatePlayers(playersData[idp]);
             } else if (this.player.credits < playersData[idp].credits) {
-                if (!this.players[idp]) {
-                    console.error(`Player with id ${idp} not found`);
-                    continue;
-                }
-                this.players[idp].credits = playersData[idp].credits;
                 this.player.credits = playersData[idp].credits;
+                // this.players holds the same object for our own id, but
+                // guard anyway: it is restored below if it ever went
+                // missing, and this runs before that.
+                if (this.players[idp]) this.players[idp].credits = playersData[idp].credits;
             }
         }
         data.kills.forEach(this.onPlayerDied.bind(this));
@@ -811,11 +840,25 @@ class Game {
             delete this.bullets[bulletId];
         });
 
+        // We are obviously still connected, so never prune ourselves.
+        // activePlayerIds comes from ships-go's Players map, which a player
+        // only enters once their first playerData frame has been processed
+        // - but we add ourselves to this.players as soon as the connection
+        // is acknowledged, which is earlier. Any broadcast arriving in that
+        // window used to delete us permanently, because updatePlayers()
+        // deliberately skips our own socketId and so never put us back. The
+        // window was harmless until NPCs arrived: with a fleet on the map
+        // there is something to broadcast on every single tick instead of
+        // once every 2s, so the race went from rare to almost certain and
+        // the local player vanished from the scoreboard and the radar.
+        const selfId = this.player?.socketId;
         for (const idp in this.players) {
+            if (idp === selfId) continue;
             if (!data.activePlayerIds.includes(idp)) {
                 delete this.players[idp];
             }
         }
+        if (selfId && !this.players[selfId]) this.players[selfId] = this.player;
 
         if (data.npcs) {
             const NPCs = this.NPCs;
@@ -830,6 +873,8 @@ class Game {
                         enemyShip.rotate = npcData.rotate || 0;
                         enemyShip.life = npcData.life;
                         enemyShip.maxLife = npcData.maxLife;
+                        enemyShip.kills = npcData.kills || 0;
+                        enemyShip.deaths = npcData.deaths || 0;
                         NPCs[id] = enemyShip;
                     } else {
                         const bhAnimation = getBlackHoleAnimation2(npcData);
@@ -843,10 +888,24 @@ class Game {
                     const npc = NPCs[id];
                     npc.x = npcData.x;
                     npc.y = npcData.y;
-                    npc.scale = npcData.scale;
                     if (npcData.type === NPC_TYPES.SHIP) {
-                        npc.rotate = npcData.rotate;
-                        npc.life = npcData.life;
+                        // Deliberately not assigning npc.scale here: a Ship
+                        // NPC is a Player, which derives its drawn and
+                        // collided size from realWidth/realHeight (only
+                        // updated by calculateScale(), which NPCs never
+                        // call) and draws with a hardcoded scale of 1. The
+                        // assignment looked like it worked but was silently
+                        // discarded. Black holes below are Animations, whose
+                        // drawFrame does honour scale.
+                        // Defensive: a missing rotate/life would poison
+                        // every position and collision calculation with
+                        // NaN, leaving an invisible, unhittable ship.
+                        if (typeof npcData.rotate === 'number') npc.rotate = npcData.rotate;
+                        if (typeof npcData.life === 'number') npc.life = npcData.life;
+                        npc.kills = npcData.kills || 0;
+                        npc.deaths = npcData.deaths || 0;
+                    } else if (typeof npcData.scale === 'number') {
+                        npc.scale = npcData.scale;
                     }
                 }
             }
@@ -866,6 +925,20 @@ class Game {
 
     }
 
+    // True when a shape is inside (or just outside) the visible area, using a
+    // margin so a shot fired just off-screen is still heard.
+    isAudible(shape) {
+        if (!this.viewRect) return true;
+        const margin = this.canvas.width / 2;
+        const audibleRect = {
+            x: this.viewRect.x - margin,
+            y: this.viewRect.y - margin,
+            width: this.viewRect.width + margin * 2,
+            height: this.viewRect.height + margin * 2
+        };
+        return this.checkArcRectCollision(shape, audibleRect);
+    }
+
     comingNewBullets(newBullets) {
         newBullets.forEach(newBullet => {
             const bullet = new Bullet(
@@ -882,7 +955,12 @@ class Game {
             bullet.id = newBullet.id;
             this.bullets[bullet.id] = bullet;
 
-            gameSounds.shot();
+            // Only shots we can actually see are audible. A full NPC fleet
+            // fires ~35 bullets a second across the whole map, and playing
+            // every one of them was both a constant roar and pointless work.
+            if (this.isAudible(bullet)) {
+                gameSounds.shot();
+            }
         })
     }
 
@@ -1220,8 +1298,27 @@ class Game {
                 const player = this.players[id];
                 textRows.push([player.name, player.kills, player.deaths]);
             }
+            // Enemy ships are listed after the players, as opponents with a
+            // record of their own. They keep their name and score across
+            // deaths (ships-npc revives the same identity), so the row means
+            // something rather than resetting every time one is destroyed.
+            for (const id in this.NPCs) {
+                const npc = this.NPCs[id];
+                if (npc?.type !== NPC_TYPES.SHIP) continue;
+                textRows.push([npc.name, npc.kills || 0, npc.deaths || 0]);
+            }
             const text = new Text('', 0, 0, this.fontSize / 2, 'Digitek', '#13ff03');
             const topY = cornerY + this.lineHeight;
+
+            // A fleet can be tens of ships, which would run the table off
+            // the bottom of the screen. Keep whatever fits, and say how many
+            // were left out instead of silently truncating.
+            const maxRows = Math.max(2, Math.floor(this.canvas.height / this.lineHeight) - 2);
+            if (textRows.length > maxRows) {
+                const hidden = textRows.length - (maxRows - 1);
+                textRows.length = maxRows - 1;
+                textRows.push([`+${hidden} more`, '', '']);
+            }
 
             let minY;
             const bgColors = ['rgba(0,0,0,0)', 'rgba(19,255,3,0.3)'];
@@ -1304,17 +1401,22 @@ class Game {
     }
 
     keyDownEvent(event) {
+        // Suppressed before the auto-repeat guard below, and on every
+        // keydown: a held Tab would otherwise move focus out of the canvas.
+        // This used to live in gamePreload.js as three listeners on
+        // document.body that were never removed, which both leaked a whole
+        // Game per visit and killed Tab navigation for the rest of the SPA.
+        // Here it is tracked in boundEvents and detached by destroy().
+        if (event.keyCode === KEYS.TAB) event.preventDefault();
         if (this.keys[event.keyCode]) return;
         this.keys[event.keyCode] = true;
-        if (this.keys[KEYS.TAB]) {
-            event.preventDefault();
-        }
         if (this.player && !this.player.isDead && event.keyCode === KEYS.SPACE) {
             this.bulletCharging = Date.now()
         }
     }
 
     keyUpEvent(event) {
+        if (event.keyCode === KEYS.TAB) event.preventDefault();
         this.keys[event.keyCode] = false;
         if (this.player && !this.player.isDead && event.keyCode === KEYS.SPACE) {
             this.newBullet()

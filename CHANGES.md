@@ -1,118 +1,126 @@
 CHANGES
 =======
-Version 1.3.8 - 2026-09-05
-------------------
-- The admin panel's enemy ship speed field is now in the game's own speed
-  units (1-50, where 50 is a player's top speed) instead of a 0-1 fraction,
-  which is a far more meaningful number to tune against.
-
-Version 1.3.7 - 2026-09-05
-------------------
-- The admin panel can now tune the NPCs while the game is running: number
-  of enemy ships (0 disables them), their life, their speed as a fraction
-  of a player's top speed, their fire rate, and the black hole cap and
-  spawn period. They're saved through the existing admin endpoints;
-  ships-go relays them to ships-npc, which applies them on its next tick.
-  The saved values are re-read from the response, so a value that was
-  clamped server-side is corrected on screen instead of silently differing
-  from what's actually running.
-
-Version 1.3.6 - 2026-09-05
-------------------
-- Bugfix (memory): three leaks that made the tab's memory grow without
-  bound during play.
-  - Bullets fired by *other* players were never expired locally. They were
-    only ever dropped on an explicit `removeBullet` broadcast, which is
-    sent by the player that gets *hit*, so every shot that missed stayed in
-    `this.bullets` for the rest of the session, being moved and drawn every
-    frame. Bullets are now expired locally for everyone. This needs no
-    extra traffic and cannot desync: `isExpired()` is pure geometry derived
-    from the `newBullet` payload, so every client reaches the same
-    conclusion at the same time.
-  - `wsQueue` is only drained while the socket is open, but `sendData` keeps
-    pushing ~30 times a second regardless, so a disconnection grew the queue
-    without limit (and then flushed thousands of stale snapshots on
-    reconnect). Past `WS_QUEUE_PRUNE_AT` queued messages, superseded
-    `playerData` snapshots are dropped on push - only the newest one is
-    meaningful.
-  - Leaving the game view did not stop the game. `GameView.vue` only removed
-    the injected `<script>` element, which does nothing to code that is
-    already running: the `requestAnimationFrame` loop rescheduled itself
-    unconditionally, the websocket flush interval was never cleared, the
-    socket stayed open and the document/window listeners stayed bound. Each
-    visit to the view therefore left an entire live `Game` behind - still
-    rendering, still holding its canvases, players and bullets, and still
-    holding a connection that ships-go counted as a player. `Game` now has a
-    `destroy()` that cancels the loop and interval, closes the socket
-    without triggering the reconnect logic, detaches every listener
-    registered in `loadEvents()` and releases the collections; `GameView.vue`
-    calls it on unmount.
-
-Version 1.3.5 - 2026-09-05
-------------------
-- Bugfix (long-standing): a player joining an in-progress game saw every
-  other ship at its default size and with a zeroed scoreboard, because
-  kills/deaths were only ever tracked from the `playerDied` events that
-  client personally witnessed - everything that happened before it
-  connected was invisible to it. `updatePlayers` now also reads the
-  `kills`/`deaths` already present in the `gameBroadcast` player data
-  (ships-go has always relayed them; nothing needed to change there) and
-  recalculates the ship's scale when they move. The two sources are merged
-  by keeping the highest value, since both only ever grow: this avoids the
-  scale flickering back a step when a kill is witnessed before its owner's
-  next state update reflects it.
-
-Version 1.3.4 - 2026-09-05
-------------------
-- Bugfix: on entering the game the player was flung downwards at high speed
-  and destroyed, with no input. `this.players` also holds an entry for the
-  local player itself (as the pre-existing `checkCollisionsWithPlayers`
-  guard shows), and the new ship-ramming check didn't skip it - so the
-  player permanently overlapped a copy of itself, getting pushed a full
-  ship-height every frame plus self-inflicted ram damage. It now skips its
-  own entry.
-
-Version 1.3.3 - 2026-09-05
-------------------
-- Ramming now works between real players too, not just against enemy Ship
-  NPCs - any two overlapping ships push each other apart and take small,
-  rate-limited damage (`checkShipBodyCollision`, generalized from the
-  NPC-only version). Kill-credit/animation still tell a player-caused death
-  apart from an NPC-caused one via the existing `fromNpc` field.
-
-Version 1.3.2 - 2026-09-05
-------------------
-- New: ramming an enemy Ship NPC now actually does something. On overlap,
-  the player is pushed back out along the axis of least penetration (so it
-  can't sit inside the ship) and takes small, rate-limited damage (reuses
-  the existing `playerHit` handling/black-hole-hit convention - no bullet,
-  `bulletId: null`, `fromNpc: 'Ship'`). Purely client-side detection, no
-  ships-go/ships-npc changes needed.
-
-Version 1.3.1 - 2026-09-05
-------------------
-- Bugfix: enemy Ship NPCs didn't show up on the radar (radar only looked at
-  `this.players`, not `this.NPCs`).
-- Bugfix: killing an enemy Ship NPC threw `TypeError: can't access property
-  "deaths", playerDied is undefined` - `onPlayerDied` only looked up real
-  players; it now also resolves NPC ids and skips death-stat bookkeeping for
-  non-player targets.
-
-Version 1.3.0 - 2026-09-05
-------------------
-- Renders the new enemy Ship NPC (from `ships-npc`) using the existing
-  `Player` class/rendering path - appears as a hostile ship that chases and
-  shoots at players, and can be destroyed.
-- Self-detects being hit by an enemy ship's bullets, reusing the existing
-  `playerHit` handling untouched (damage/death/respawn/kill-feed).
-- Detects the player's own bullets hitting an enemy ship and reports it via
-  the new `npcHit` websocket event.
-
 Version 1.2.0 - 2026-09-XX
 ------------------
-- Adapted to backend `gameBroadcast` payload change: NPCs are now sent
-  under `npcs` instead of `blackHoles` (backend NPC logic moved to the new
-  `ships-npc` service, no visible gameplay change).
+Client support for the NPC simulation extracted into the new `ships-npc`
+service: hostile enemy ships, ramming, an admin panel to tune them live, and
+the memory and correctness fixes that playing against a fleet exposed.
+
+NPCs
+- NPCs now arrive under `npcs` in the `gameBroadcast` payload instead of
+  `blackHoles`, since the backend's NPC logic moved to `ships-npc`.
+- Enemy Ship NPCs are drawn through the existing `Player` class and rendering
+  path: hostile ships that chase and shoot, appear on the radar, and can be
+  destroyed. The client self-detects being hit by their bullets - reusing the
+  existing `playerHit` damage/death/respawn/kill-feed handling untouched - and
+  reports its own hits via the new `npcHit` event. An NPC killer is named in
+  the kill feed like a player, but kill credit and ship scale still apply only
+  to real players, since an NPC's size is owned by `ships-npc`.
+- Ramming: any two overlapping ships, players or NPCs, push each other apart
+  along the axis of least penetration and take small, rate-limited damage.
+  Detection is purely client-side and needs no backend change; kill credit
+  still tells a player-caused death from an NPC-caused one via `fromNpc`.
+- The scoreboard (Tab, or automatically on death) lists the enemy NPC ships
+  after the players with the same Name/Kills/Deaths columns. Their score is
+  meaningful because `ships-npc` revives a killed ship under its original
+  identity. With a large fleet it keeps as many rows as fit on screen and
+  ends with a "+N more" row instead of running off the bottom.
+- Shots are only audible in or just outside the visible area. An NPC fleet
+  fires across the whole map, so playing every shot was a constant roar as
+  well as pointless work.
+- The player payload now carries the ship's raw width and height. A shipId
+  alone cannot describe a ship to anyone else, because the public ship list
+  cannot contain a player's own painting project, and NPCs need the real
+  numbers to aim at the middle of one. See ships-npc/CHANGES.md 1.0.0.
+
+Admin panel
+- The NPCs are tuned while the game runs: number of enemy ships (0 disables
+  them), life, speed, fire rate, whether enemy ships attack each other (off
+  by default), and the black hole cap and spawn period. Values are saved
+  through the existing admin endpoints and relayed by ships-go to ships-npc,
+  which applies them on its next tick.
+- Speed is expressed in the game's own units (1-50, where 50 is a player's
+  top speed) rather than a 0-1 fraction, which is far more meaningful to tune
+  against.
+- Fields respect the minimum and maximum shown on screen, and the saved
+  values are re-read from the response, so anything clamped server-side is
+  corrected on screen instead of silently differing from what is running.
+
+Bugfixes
+- Three leaks that made memory grow without bound during play:
+  - Bullets fired by *other* players were never expired locally; they were
+    only dropped on an explicit `removeBullet` broadcast, which is sent by
+    the player that gets *hit*. Every shot that missed therefore stayed in
+    `this.bullets` for the whole session, moved and drawn every frame. They
+    are now expired locally for everyone, which needs no extra traffic and
+    cannot desync: `isExpired()` is pure geometry derived from the
+    `newBullet` payload, so every client agrees at the same moment.
+  - `wsQueue` is only drained while the socket is open, but `sendData` keeps
+    pushing ~30 times a second regardless, so a disconnection grew the queue
+    without limit and flushed thousands of stale snapshots on reconnect. It
+    is now capped by length; dropping only superseded position snapshots
+    still let a long disconnect grow it and replay seconds-old damage.
+  - Leaving the game view did not stop the game. `GameView.vue` only removed
+    the injected `<script>`, which does nothing to code already running: the
+    `requestAnimationFrame` loop rescheduled itself, the flush interval was
+    never cleared, and the socket and listeners stayed live. Each visit left
+    an entire `Game` behind - still rendering, still holding its canvases,
+    players and bullets, still counted as a player by ships-go. `Game` now
+    has a `destroy()` that cancels the loop and interval, closes the socket
+    without triggering reconnection, detaches every listener registered in
+    `loadEvents()` and releases the collections; `GameView.vue` calls it on
+    unmount.
+- You were missing from the scoreboard and the radar - playing alone the
+  table was just its headers. You are added to the player list as soon as the
+  connection is acknowledged, but the list is pruned against the broadcast's
+  activePlayerIds, which a player only enters once ships-go has processed
+  their first playerData frame. A broadcast arriving in between deleted you,
+  and nothing put you back, because incoming updates deliberately skip your
+  own socketId. NPCs turned a rare race into a near-certain one: with a fleet
+  on the map there is something to broadcast every tick rather than once
+  every two seconds. We are obviously still connected, so we are no longer
+  prunable, and are restored if ever absent.
+- Long-standing: a player joining an in-progress game saw every other ship at
+  its default size with a zeroed scoreboard, because kills/deaths were only
+  counted from `playerDied` events that client personally witnessed.
+  `updatePlayers` now also reads the `kills`/`deaths` already present in the
+  broadcast (ships-go has always relayed them) and recalculates the ship's
+  scale when they move. The two sources are merged by keeping the highest
+  value, since both only grow; this stops the scale flickering back a step
+  when a kill is witnessed before its owner's next state update reflects it.
+- The game tab grew to gigabytes of memory during a long session.
+  `gameSounds` cloned its <audio> element on every single shot, and with a
+  full NPC fleet the client receives ~35 newBullet events a second - so ~35
+  fresh HTMLAudioElements per second, each decoding shot.wav (308 KB of
+  uncompressed PCM) into its own native buffer. Those buffers live outside
+  the JS heap, so V8 felt no pressure to collect them: the heap stayed flat
+  at ~10 MB while the tab climbed past 2 GB. Sounds now play from a fixed
+  pool of preloaded elements (8 shot voices, 4 explosion). Measured
+  headless: 12 elements at startup and still 12 after a minute of combat,
+  against ~2000 before.
+- A player flying a custom ship broke every other client. A client only knows
+  the generic ships plus its *own* custom ones, so anyone else's custom
+  `shipId` was missing from `ShipsManager`, `getShipById` returned undefined
+  and `new Player(...)` threw on `ship.layers`. Thrown from the initial
+  `updatePlayers()` pass, that aborted setup and left the game with no local
+  player at all; the same failure stopped the admin panel's status map
+  drawing entirely. Unknown ships now fall back to a generic hull in both, so
+  they are merely drawn wrong instead of breaking the session.
+- Security: player names were inserted as HTML into the status monitor, which
+  the admin panel embeds. Any player could pick a name that ran code in the
+  administrator's browser, once a second, for as long as they were online.
+  Names are now inserted as text.
+- The admin status map rebuilt every player's sprite once a second,
+  allocating a canvas each time; sprites are now reused.
+- Leaving and re-entering the game leaked a full copy of the ship catalogue
+  every time. The preload script attached three key listeners that were never
+  removed, and because the module is loaded with a cache-busting url each
+  visit created a brand new copy of it, kept alive forever by those
+  listeners. It also broke Tab navigation everywhere else in the site for the
+  rest of the session. Tab is now suppressed by the game itself, which
+  already detaches its own listeners on exit.
+- Removed a black hole scale that was silently discarded and two dead
+  functions.
 
 Version 1.1.0 - 2026-09-04
 ------------------

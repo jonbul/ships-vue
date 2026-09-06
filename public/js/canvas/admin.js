@@ -15,6 +15,7 @@ async function load() {
     enemyShipFireRateMs: 'int',
     maxBlackHoles: 'int',
     blackHoleSpawnPeriodSec: 'int',
+    enemyShipsFightEachOther: 'bool',
   };
   const npcInputs = {};
   for (const name in npcFields) {
@@ -24,12 +25,30 @@ async function load() {
   const readNpcSettings = () => {
     const settings = {};
     for (const name in npcFields) {
-      const value = npcFields[name] === 'int'
-        ? parseInt(npcInputs[name].value, 10)
-        : parseFloat(npcInputs[name].value);
+      // The element can legitimately be missing: load() is async, so this
+      // may run after the view unmounted, and a renamed id in AdminView
+      // would otherwise throw here and abort the whole save.
+      const input = npcInputs[name];
+      if (!input) continue;
+      if (npcFields[name] === 'bool') {
+        settings[name] = !!input.checked;
+        continue;
+      }
+      let value = npcFields[name] === 'int'
+        ? parseInt(input.value, 10)
+        : parseFloat(input.value);
       // Skip anything unparseable rather than sending NaN: ships-npc would
       // just fall back to its default, silently discarding the other edits.
-      if (!Number.isNaN(value)) settings[name] = value;
+      if (Number.isNaN(value)) continue;
+      // The min/max in the template are otherwise decorative - nothing calls
+      // reportValidity(), so an out-of-range number is submitted as typed.
+      // ships-npc clamps too; this keeps the on-screen bounds honest.
+      const min = parseFloat(input.min);
+      const max = parseFloat(input.max);
+      if (!Number.isNaN(min)) value = Math.max(min, value);
+      if (!Number.isNaN(max)) value = Math.min(max, value);
+      input.value = value;
+      settings[name] = value;
     }
     return settings;
   };
@@ -37,7 +56,12 @@ async function load() {
   const writeNpcSettings = (settings) => {
     if (!settings) return;
     for (const name in npcFields) {
-      if (settings[name] !== undefined) npcInputs[name].value = settings[name];
+      if (!npcInputs[name] || settings[name] === undefined) continue;
+      if (npcFields[name] === 'bool') {
+        npcInputs[name].checked = !!settings[name];
+      } else {
+        npcInputs[name].value = settings[name];
+      }
     }
   };
 

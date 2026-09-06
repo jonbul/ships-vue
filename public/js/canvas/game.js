@@ -10,7 +10,13 @@ import {
     Bullet,
     RadarArrow,
     ChargingBar,
-    Player
+    Player,
+    setKillScaling,
+    setShipSize,
+    setShipLife,
+    getShipLife,
+    DEFAULT_SHIP_SIZE,
+    DEFAULT_SHIP_LIFE
 } from './gameClasses.js';
 
 import { KEYS, CHARGE_TIME, CHARGE_TIME_OVERFLOW, SPEED, ALERT_TYPES, NPC_TYPES } from '/js/utils/constants.js';
@@ -29,6 +35,11 @@ const SHIP_RAM_COOLDOWN_MS = 800;
 // Outgoing message queue length past which superseded playerData snapshots
 // are dropped, so a long disconnect can't grow it without limit.
 const WS_QUEUE_PRUNE_AT = 200;
+// Radar blip colours. Black holes are the exception on the radar: they are
+// yellow, drawn to scale and drawn last, over every ship, because they are
+// the one thing on the map that kills without being shot at.
+const RADAR_SHIP_COLOR = 'rgba(255,0,0,0.7)';
+const RADAR_BLACK_HOLE_COLOR = 'rgba(255,221,0,0.85)';
 
 class Game {
     constructor(canvas, username, credits, isSmartphone, ship, shipsManager) {
@@ -48,6 +59,24 @@ class Game {
         // this.players/this.NPCs (see pruneRamCooldowns) so a long session
         // with respawning NPCs doesn't accumulate an entry per id ever seen.
         this.shipRamHitAt = {};
+        // Whether touching another ship hurts. Owned by the admin panel and
+        // pushed down by ships-go (gameSettings), because this damage is
+        // resolved client-side and so has to be switched off in every
+        // browser at once. Defaults to on, matching ships-go, so a missed
+        // event fails towards the normal rules.
+        this.contactDamage = true;
+        // Ships growing with their score. Off unless an admin turns it on;
+        // see setKillScaling in gameClasses.js, which owns the flag the
+        // Player class actually reads.
+        this.killScaling = false;
+        // The size every ship is normalised to. Mirrors the module-level
+        // value in gameClasses.js; kept here only to spot a real change,
+        // since re-measuring the fleet is expensive.
+        this.shipSize = DEFAULT_SHIP_SIZE;
+        // The life every ship spawns with. Like the size, the flag the
+        // Player class reads lives in gameClasses.js; this copy exists so a
+        // resend of the same settings is not mistaken for a change.
+        this.shipLife = DEFAULT_SHIP_LIFE;
         this.bullets = {};
         this.keys = [];
         this.shipsManager = shipsManager;
@@ -278,12 +307,37 @@ class Game {
                         this.playerUpdated = true;
                         this.reloadPlayer();
                         this.player.hide = false;
-                        this.player.life = 10;
+                        // A respawn is a new ship, so it gets whatever the
+                        // admin panel currently says - the same rule NPC
+                        // ships follow, where a change applies to the next
+                        // one to spawn and never heals one already flying.
+                        this.player.maxLife = getShipLife();
+                        this.player.life = this.player.maxLife;
                         this.player.isDead = false;
                     }, 10000);
                 }, 2000);
             }
             this.ws.sendData('removeBullet', { bulletId: msg.bulletId });
+        });
+        this.ws.on('gameSettings', data => {
+            this.contactDamage = data.contactDamage !== false;
+            const killScaling = data.killScaling === true;
+            const shipSize = Number(data.shipSize) > 0 ? Number(data.shipSize) : DEFAULT_SHIP_SIZE;
+            const shipLife = Number(data.shipLife) > 0 ? Number(data.shipLife) : DEFAULT_SHIP_LIFE;
+            setKillScaling(killScaling);
+            setShipSize(shipSize);
+            setShipLife(shipLife);
+            this.shipLife = shipLife;
+            // Ships only size themselves when something changes, so everyone
+            // already on screen has to be re-measured - including the local
+            // player, whose collision box this is. Skipped when nothing
+            // changed, because calculateScale() re-renders each ship's
+            // offscreen picture and this arrives on every admin save.
+            if (this.killScaling !== killScaling || this.shipSize !== shipSize) {
+                this.killScaling = killScaling;
+                this.shipSize = shipSize;
+                this.rescaleShips();
+            }
         });
         this.ws.on('sendHome', () => location.href = '/');
         this.ws.on('getBackgroundCards', data => {
@@ -435,6 +489,33 @@ class Game {
         }
     }
 
+    /**
+     * Re-measures every ship on screen after a sizing rule changed. A ship
+     * only sizes itself when something about it changes, so nothing already
+     * in the game would pick up a new setting on its own.
+     */
+    rescaleShips() {
+        const seen = new Set();
+        for (const id in this.players) {
+            seen.add(this.players[id]);
+            this.players[id].calculateScale();
+        }
+        // Enemy Ship NPCs are Players too and are normalised to the same
+        // standard size, so they have to be re-measured as well or the
+        // fleet already on the map would stay at the old size while
+        // reinforcements arrive at the new one. Black hole NPCs are
+        // Animations and have no scale to calculate.
+        for (const id in this.NPCs) {
+            const npc = this.NPCs[id];
+            if (seen.has(npc) || typeof npc.calculateScale !== 'function') continue;
+            seen.add(npc);
+            npc.calculateScale();
+        }
+        // this.players holds the local player too, but only once it has a
+        // socketId, so it is re-measured separately when it isn't in there.
+        if (this.player && !seen.has(this.player)) this.player.calculateScale();
+    }
+
     onPlayerDied(msg) {
         const playerDied = this.player.socketId == msg.playerId ? this.player : (this.players[msg.playerId] || this.NPCs[msg.playerId]);
         if (!playerDied) return;
@@ -454,22 +535,29 @@ class Game {
             killer.kills++;
             killer.calculateScale();
         }
-        const playerRealDimension = playerDied.getRealDimension();
-        const killedByEnemyShot = !!msg.from && msg.from !== playerDied.socketId && !msg.fromNpc;
-        const explossionFactory = killedByEnemyShot ? getExplossionAnimation2 : getBlackHoleExplossionAnimation;
-        const explossion = explossionFactory(
-            playerRealDimension.x,
-            playerRealDimension.y,
-            playerRealDimension.width > playerRealDimension.height ? playerRealDimension.width : playerRealDimension.height
-        );
-        this.animations.push(explossion);
-        explossion.addEndCallback(() => {
-            const index = this.animations.indexOf(explossion);
-            if (index !== -1) {
-                this.animations.splice(index, 1);
-            }
-        });
-        explossion.play();
+        // Nothing is drawn while the tab is hidden, but deaths keep arriving
+        // over the websocket - and an Animation renders all of its frames
+        // into offscreen canvases the moment it is built. Skipping the ones
+        // nobody can see costs nothing visually and keeps a fleet's worth of
+        // explosions from being allocated while the tab is in the background.
+        if (!document.hidden) {
+            const playerRealDimension = playerDied.getRealDimension();
+            const killedByEnemyShot = !!msg.from && msg.from !== playerDied.socketId && !msg.fromNpc;
+            const explossionFactory = killedByEnemyShot ? getExplossionAnimation2 : getBlackHoleExplossionAnimation;
+            const explossion = explossionFactory(
+                playerRealDimension.x,
+                playerRealDimension.y,
+                playerRealDimension.width > playerRealDimension.height ? playerRealDimension.width : playerRealDimension.height
+            );
+            this.animations.push(explossion);
+            explossion.addEndCallback(() => {
+                const index = this.animations.indexOf(explossion);
+                if (index !== -1) {
+                    this.animations.splice(index, 1);
+                }
+            });
+            explossion.play();
+        }
         gameSounds.explosion();
 
         const fromName = killer ? killer.name : null;
@@ -551,7 +639,7 @@ class Game {
                     const killByBlackHole = () => {
                         console.log("distance to black hole:", centerDistance);
 
-                        const lethalDamage = this.player.life || 10;
+                        const lethalDamage = this.player.life || getShipLife();
                         this.player.life = 0;
 
                         this.ws.sendData('playerHit', {
@@ -658,6 +746,10 @@ class Game {
                 this.player.y += pushDir * overlapY;
             }
 
+            // The push above is physics and always happens - two ships must
+            // never occupy the same space. Only the damage is optional.
+            if (!this.contactDamage) continue;
+
             const lastHit = this.shipRamHitAt[id] || 0;
             const now = Date.now();
             if (now - lastHit < SHIP_RAM_COOLDOWN_MS) continue;
@@ -671,6 +763,22 @@ class Game {
                 ...(isNpc ? { fromNpc: NPC_TYPES.SHIP } : {}),
                 bulletCharge: SHIP_RAM_DAMAGE
             });
+            // ...and the same damage to whatever was rammed, when that is an
+            // NPC. Against another player this would be wrong as well as
+            // unnecessary: their own client runs this identical check and
+            // damages them, so sending it here would hit them twice. An NPC
+            // has no client, so without this the collision hurt only us - a
+            // free advantage no player gets. Reported with a null bulletId,
+            // the convention already used for damage with no bullet behind
+            // it.
+            if (isNpc) {
+                this.ws.sendData('npcHit', {
+                    npcId: id,
+                    bulletId: null,
+                    from: this.player.socketId,
+                    bulletCharge: SHIP_RAM_DAMAGE
+                });
+            }
         }
     }
 
@@ -940,6 +1048,15 @@ class Game {
     }
 
     comingNewBullets(newBullets) {
+        // A hidden tab draws nothing and ticks nothing: requestAnimationFrame
+        // stops, so bullets neither move, expire nor hit anybody - while the
+        // websocket keeps delivering them at ~35 a second with a full fleet
+        // on the map. Kept, they would pile up for the whole absence and then
+        // all appear at once, fired at where this player was minutes ago.
+        // Nothing is lost by dropping them: a bullet that hits this player is
+        // resolved by this same paused loop, so none of them could have hit
+        // anything anyway.
+        if (document.hidden) return;
         newBullets.forEach(newBullet => {
             const bullet = new Bullet(
                 newBullet.socketId,
@@ -1183,7 +1300,6 @@ class Game {
     }
 
     loadRadar() {
-        const player = this.player;
         // r is radar scale
         const r = this.canvas.width / 10;
         const x = (this.canvas.width / 2) - r;
@@ -1203,38 +1319,61 @@ class Game {
 
         // radar scope in game units
         const radarScope = this.canvas.width * (10 / this.radarZoom);
+        const blipSize = this.canvas.width / 300;
         this.radarPoints = [];
+        // Ships first, black holes second, because the list is drawn in
+        // order: a black hole is the one thing on the radar worth seeing
+        // whatever is standing in front of it.
         const radarTargets = [];
         for (const id in this.players) {
-            radarTargets.push(this.players[id]);
+            radarTargets.push({ target: this.players[id], color: RADAR_SHIP_COLOR, size: blipSize });
         }
         for (const id in this.NPCs) {
             const npc = this.NPCs[id];
-            if (npc?.type === NPC_TYPES.SHIP) radarTargets.push(npc);
+            if (npc?.type === NPC_TYPES.SHIP) radarTargets.push({ target: npc, color: RADAR_SHIP_COLOR, size: blipSize });
         }
-        for (const target of radarTargets) {
-            if (this.player !== target && !target.isDead) {
-                const xLength = target.x - player.x;
-                const yLength = target.y - player.y;
-                const distance = this.player.getDistanceToPlayer(target);
+        for (const id in this.NPCs) {
+            const npc = this.NPCs[id];
+            if (npc?.type !== NPC_TYPES.BLACK_HOLE) continue;
+            // Drawn to scale, unlike a ship: a black hole is an area to
+            // stay out of rather than a point, and it grows and shrinks
+            // over its life. Never smaller than a ship blip, so a newborn
+            // one is still visible.
+            const npcRadius = getRadiusFromRect(npc.getRealDimension());
+            const size = Math.max(blipSize, npcRadius * r / radarScope);
+            radarTargets.push({ target: npc, color: RADAR_BLACK_HOLE_COLOR, size });
+        }
 
-                if (distance < radarScope) {
-                    const radarX = (xLength * r / radarScope) + x;
-                    const radarY = (yLength * r / radarScope) + y;
-                    // Coordinates relative to radar center
-                    this.radarPoints.push({ x: radarX, y: radarY });
-                }
-            }
+        const playerDimension = this.player.getRealDimension();
+        for (const { target, color, size } of radarTargets) {
+            if (this.player === target || target.isDead) continue;
+            // Centers, not the top-left anchors: a black hole is hundreds
+            // of units across, so its corner is nowhere near where it is.
+            const targetDimension = target.getRealDimension();
+            const xLength = targetDimension.centerX - playerDimension.centerX;
+            const yLength = targetDimension.centerY - playerDimension.centerY;
+            const distance = Math.hypot(xLength, yLength);
+            if (distance >= radarScope) continue;
+
+            // Coordinates relative to radar center
+            this.radarPoints.push({
+                x: (xLength * r / radarScope) + x,
+                y: (yLength * r / radarScope) + y,
+                color,
+                size
+            });
         }
     }
 
     drawRadar() {
         const playerRealDimension = this.player.getRealDimension();
         this.radar.draw(this.context, { x: playerRealDimension.x, y: playerRealDimension.y });
-        const arcPoint = new Arc(0, 0, this.canvas.width / 300, 'rgba(255,0,0,0.7)');
+        const arcPoint = new Arc(0, 0, this.canvas.width / 300, RADAR_SHIP_COLOR);
         this.radarPoints.forEach(point => {
             arcPoint.x = point.x + playerRealDimension.x;
             arcPoint.y = point.y + playerRealDimension.y;
+            arcPoint.radius = point.size;
+            arcPoint.backgroundColor = point.color;
             arcPoint.draw(this.context);
         })
     }
@@ -1250,11 +1389,12 @@ class Game {
         }
         this.radar.draw(this.context, options);
 
-        const arcPoint = new Arc(0, 0, this.canvas.width / 300, 'rgba(255,0,0,0.7)');
+        const arcPoint = new Arc(0, 0, this.canvas.width / 300, RADAR_SHIP_COLOR);
         this.radarPoints.forEach(point => {
-
             arcPoint.x = point.x
             arcPoint.y = point.y
+            arcPoint.radius = point.size;
+            arcPoint.backgroundColor = point.color;
             arcPoint.draw(this.context, options);
         });
     }
@@ -1388,6 +1528,7 @@ class Game {
         listen(document.body, 'keydown', this.keyDownEvent);
         listen(document.body, 'keyup', this.keyUpEvent);
         listen(window, 'blur', this.leaveWindow);
+        listen(document, 'visibilitychange', this.visibilityChanged);
         listen(this.canvas, 'dblclick', this.toFullScreen);
         if (this.isSmartphone) {
 
@@ -1469,6 +1610,19 @@ class Game {
 
         this.ws.sendData('newBullet', msg);
         this.lastBulletTs = Date.now()
+    }
+
+    /**
+     * Drops the state that went stale while the tab was in the background.
+     * Everything the game simulates is advanced by the render loop, which
+     * browsers stop entirely for a hidden tab - so on coming back, whatever
+     * arrived over the still-live websocket in the meantime would otherwise
+     * play out all at once.
+     */
+    visibilityChanged() {
+        if (document.hidden) return;
+        this.bullets = {};
+        if (this.drawableBullets) this.drawableBullets.shapes = [];
     }
 
     leaveWindow() {

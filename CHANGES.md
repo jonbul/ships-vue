@@ -20,6 +20,37 @@ NPCs
   along the axis of least penetration and take small, rate-limited damage.
   Detection is purely client-side and needs no backend change; kill credit
   still tells a player-caused death from an NPC-caused one via `fromNpc`.
+  Both ships are damaged, not just the one doing the looking: between two
+  players that already happened, since each client damages itself and every
+  client runs the same check, but an NPC has no client, so ramming one is
+  also reported with an `npcHit` carrying no bullet. Without it a collision
+  hurt only the player - a free advantage for the NPC.
+- Ships growing with their score is now an admin setting, and off by
+  default. A ship's size still normalises every hull to a common base; only
+  the kills-minus-deaths term is dropped, since removing the base too would
+  render each ship at whatever its artwork happens to measure - a different
+  change entirely. Switching it re-measures everyone already on screen,
+  because a ship only sizes itself when something changes, and the size is
+  also its collision box. NPC ships are unaffected: their scale is owned by
+  ships-npc.
+- The size every ship is drawn at is an admin setting, defaulting to the 100
+  the client used to hardcode. It normalises every hull to one size whatever
+  its artwork measures, so a 400px ship and a 100px one meet as equals, and
+  it is the collision box as well as the picture. Changing it re-measures
+  everyone already on screen - players and NPC ships alike, since NPC ships
+  are drawn through the same class and normalised the same way.
+- Black holes are on the radar, as a yellow circle drawn to scale and drawn
+  over every ship blip. They were missing from it entirely, which made the
+  one thing on the map that kills without shooting the one thing the radar
+  did not warn about. Blips are now placed by ship centres rather than
+  top-left corners, which matters for something hundreds of units across.
+- A ship's name is drawn centred over it. It was aligned from the ship's
+  left edge, so the label sat further off centre the longer the name.
+- Contact damage can be switched off for everyone from the admin panel. The
+  value arrives as a new `gameSettings` event (on connect, and again the
+  moment an admin saves) rather than being read at page load, so it applies
+  to players already in the game. Ships still push each other apart when it
+  is off; only the damage stops.
 - The scoreboard (Tab, or automatically on death) lists the enemy NPC ships
   after the players with the same Name/Kills/Deaths columns. Their score is
   meaningful because `ships-npc` revives a killed ship under its original
@@ -34,14 +65,36 @@ NPCs
   numbers to aim at the middle of one. See ships-npc/CHANGES.md 1.0.0.
 
 Admin panel
-- The NPCs are tuned while the game runs: number of enemy ships (0 disables
-  them), life, speed, fire rate, whether enemy ships attack each other (off
-  by default), and the black hole cap and spawn period. Values are saved
+- The NPCs are tuned while the game runs: which of the two NPC fleets are
+  flying (the rule-based `[NPC]` ships, the neural-network `[AI]` ships,
+  both, or neither), how many of each - up to 100 per fleet - plus life,
+  speed, fire rate and the black hole cap and spawn period. Values are saved
   through the existing admin endpoints and relayed by ships-go to ships-npc,
-  which applies them on its next tick.
+  which applies them on its next tick. The controller owns the decision and
+  an inactive fleet's count is disabled rather than merely ignored: the two
+  otherwise say the same thing in two places, and typing "1 AI ship" while
+  the controller reads "Rules only" saved happily and spawned nothing. The
+  number itself is kept, so switching a fleet off and back on restores it.
+- Who attacks whom is a grid, not a checkbox: a row per attacking fleet, a
+  column per target (players, `[NPC]`, `[AI]`), so any combination can be set
+  up - AI against NPC only, both fleets ignoring players, everyone against
+  everyone. Shown as a table because six loose checkboxes are unreadable,
+  whereas the grid makes the whole rule set legible at a glance.
+- The panel was rebuilt as a responsive card grid with a sticky save bar,
+  after it grew past what a single flat column of inputs could carry. It
+  reflows to one column on a narrow screen, and the two fleets are colour
+  tagged so the settings match the names seen in game.
 - Speed is expressed in the game's own units (1-50, where 50 is a player's
   top speed) rather than a 0-1 fraction, which is far more meaningful to tune
   against.
+- The rules that apply to everyone - ship life, ship size, contact damage and
+  score scaling - are grouped in their own "Game rules" card, rather than
+  sitting under the attack matrix they have nothing to do with. Ship life
+  moved there from the NPC-only "Ship tuning" card, because it now really is
+  everyone's: the player used to spawn with a hardcoded 10 however high an
+  admin set it, so raising it armoured the NPCs and nobody else. A player now
+  spawns with the configured life, and like an NPC keeps the life they
+  spawned with when the setting changes mid-flight.
 - Fields respect the minimum and maximum shown on screen, and the saved
   values are re-read from the response, so anything clamped server-side is
   corrected on screen instead of silently differing from what is running.
@@ -70,6 +123,22 @@ Bugfixes
     without triggering reconnection, detaches every listener registered in
     `loadEvents()` and releases the collections; `GameView.vue` calls it on
     unmount.
+- Coming back to a backgrounded tab replayed everything that had happened
+  while it was away: every explosion at once, a wall of bullets, and the
+  whole kill feed. Browsers stop `requestAnimationFrame` entirely for a
+  hidden tab, and the game advances *everything* from that loop - while the
+  websocket keeps delivering. Animations counted frames per draw call and
+  messages faded by a fixed step per draw, so anything created in the
+  background froze at its first frame and started only on the first frame
+  back. Animation frames and message fading are now measured in wall-clock
+  time, so anything nobody watched is simply over by the time they look;
+  explosions are not built at all while hidden (an `Animation` renders every
+  frame into an offscreen canvas the moment it is constructed, so a fleet's
+  worth of them was also real memory); the kill feed is capped; and incoming
+  bullets are dropped while hidden and cleared on return, since none of them
+  could have hit anything - the collision pass is part of the same paused
+  loop - and resolving them late meant a wall of bullets and possibly an
+  instant death on returning.
 - You were missing from the scoreboard and the radar - playing alone the
   table was just its headers. You are added to the player list as soon as the
   connection is acknowledged, but the list is pruned against the broadcast's

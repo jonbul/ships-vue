@@ -74,6 +74,7 @@ const CONST = {
 
 const NPC_TYPES = {
     BLACK_HOLE: 'BlackHole',
+    SHIP: 'Ship',
 };
 
 export {

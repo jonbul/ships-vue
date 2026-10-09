@@ -38,5 +38,5 @@ __screenshots__/
 # Vite
 *.timestamp-*-*.mjs
 
-# SSL
-ssl/*
+# SSL (symlink to ../files/ssl, which lives outside the repo)
+ssl

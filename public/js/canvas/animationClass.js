@@ -1,5 +1,17 @@
 import { Arc, Ellipse, Layer, Picture } from './canvasClasses.js';
 
+// How long one animation frame lasts. It matches the game's fixed update
+// rate (30 Hz), which is the cadence these animations were drawn against
+// back when a frame advanced once per draw call.
+//
+// They are timed rather than counted because a hidden tab draws *nothing*:
+// browsers stop firing requestAnimationFrame entirely, while the websocket
+// keeps delivering the events that create animations. Counting frames meant
+// every explosion that happened while the tab was in the background froze at
+// its first frame and then played, all together, on the first frame after
+// coming back. Timed frames make an animation nobody watched simply be over.
+const ANIMATION_FRAME_MS = 1000 / 30;
+
 class Animation {
     constructor({ repeat = false, maxDuration, frames = [], layer = new Layer(), x = 0, y = 0, width = 0, height = 0, speed = 1, scale = 1, renderingReRunFrames = 1, dynamicRender = false, onEnd }) {
         this.repeat = repeat;
@@ -50,22 +62,25 @@ class Animation {
     }
 
     nextFrame() {
-        this.currentFrame += this.speed;
-        if (this.currentFrame >= this.frames.length) { // animation ended
-            let limitTimeElapsed = !!this.maxDuration && (this.maxDuration > 0) && (Date.now() - this.startTimestamp) > this.maxDuration;
+        const elapsed = Date.now() - this.startTimestamp;
+        const framesElapsed = Math.floor((elapsed * this.speed) / ANIMATION_FRAME_MS);
 
+        if (framesElapsed < this.frames.length) {
+            this.currentFrame = framesElapsed;
+            return;
+        }
 
-            if (this.repeat) {
-                this.currentFrame = -1;
-            }
-            if (!this.repeat || (this.repeat && limitTimeElapsed)) {
-                this.stop();
-                // Call onEnd callback if defined and if the animation is not set to repeat or if it has a maxDuration and the elapsed time is less than maxDuration
-                if (this.onEnd.length) {
-                    this.onEnd.forEach(callback => callback());
-                }
-                return;
-            }
+        // Past the last frame.
+        const limitTimeElapsed = !!this.maxDuration && (this.maxDuration > 0) && elapsed > this.maxDuration;
+        if (this.repeat && !limitTimeElapsed) {
+            this.currentFrame = framesElapsed % this.frames.length;
+            return;
+        }
+
+        this.stop();
+        // Call onEnd callback if defined and if the animation is not set to repeat or if it has a maxDuration and the elapsed time is less than maxDuration
+        if (this.onEnd.length) {
+            this.onEnd.forEach(callback => callback());
         }
     }
 

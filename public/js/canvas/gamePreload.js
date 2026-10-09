@@ -5,6 +5,15 @@ import { asyncRequest } from '/js/utils/functions.js';
 
 const gameData = await asyncRequest({ path: "/game/data" });
 
+// NOTE: nothing may be attached to document/window at module scope here.
+// GameView.vue injects this file with a `?t=` cache-buster, so every visit to
+// the game evaluates a *fresh* module instance. A listener added here would
+// never be removed (onUnmounted only drops the <script> element, which does
+// not unload the module), and would keep this instance's ShipsManager and all
+// its per-ship canvases alive forever - one full copy per visit. Tab
+// suppression now lives in Game.keyDownEvent, which destroy() detaches.
+
+
 let guest = false;
 let credits = 0;
 let _username = gameData.username;

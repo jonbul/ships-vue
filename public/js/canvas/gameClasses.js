@@ -9,6 +9,67 @@ import Forms from './canvasClasses.js';
 import { parseLayers } from '/js/utils/functions.js';
 
 window.forms = Forms;
+
+// Whether a ship grows with its score. Owned by the admin panel and pushed
+// down by ships-go in the gameSettings event; module-level because a Player
+// has no route to the game object, and every client must agree or the same
+// ship would be a different size (and a different collision box) on each
+// screen. Off by default, matching ships-go.
+let killScalingEnabled = false;
+
+/**
+ * Turns score-based ship scaling on or off. Callers are responsible for
+ * re-running calculateScale() on ships that already exist, since a Player
+ * only sizes itself when something changes.
+ */
+export function setKillScaling(enabled) {
+    killScalingEnabled = !!enabled;
+}
+
+// The size every ship is normalised to when it enters the game, whatever
+// its artwork measures. Admin-configurable and pushed down in the same
+// gameSettings event; 100 is the value this was hardcoded to before.
+export const DEFAULT_SHIP_SIZE = 100;
+let shipSizeStandard = DEFAULT_SHIP_SIZE;
+
+/**
+ * Sets the standard size every ship is drawn at. Ignores anything that
+ * isn't a usable number, so a malformed setting leaves the fleet at its
+ * current size instead of collapsing it to a dot. Callers are responsible
+ * for re-running calculateScale() on ships that already exist.
+ */
+export function setShipSize(size) {
+    const parsed = Number(size);
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    shipSizeStandard = parsed;
+}
+
+export function getShipSize() {
+    return shipSizeStandard;
+}
+
+// The life every ship enters the game with, players included. Same story as
+// the size above: owned by the admin panel, pushed down in gameSettings, 10
+// is what it was hardcoded to. Changing it does not heal or hurt anyone
+// already flying - a ship keeps the life it spawned with until it dies,
+// which is how NPC ships have always treated this setting.
+export const DEFAULT_SHIP_LIFE = 10;
+let shipLifeStandard = DEFAULT_SHIP_LIFE;
+
+/**
+ * Sets the life every ship spawns with. Ignores anything that isn't a
+ * usable number, so a malformed setting can't spawn everyone dead.
+ */
+export function setShipLife(life) {
+    const parsed = Number(life);
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    shipLifeStandard = parsed;
+}
+
+export function getShipLife() {
+    return shipLifeStandard;
+}
+
 class Player {
     constructor(ship, username, shipId, x = 0, y = 0, credits) {
         this.name = username;
@@ -19,11 +80,16 @@ class Player {
         this.x = x;
         this.y = y;
         this.nameShape = new Text(this.name, this.x, this.y - 10, 30, 'Helvetica', '#ffffff');
+        // Text draws from its x with the canvas default alignment ("start"),
+        // so the label used to hang off the ship's left edge and drift
+        // further the longer the name. draw() puts x at the ship's middle.
+        this.nameShape.textAlign = this.nameShape.align.CENTER;
         this.width = this.ship.width || this.ship.canvas.width;
         this.height = this.ship.height || this.ship.canvas.height;
         this.rotate = 0;
         this.bullets = [];
-        this.life = 10;
+        this.life = shipLifeStandard;
+        this.maxLife = shipLifeStandard;
         this.deaths = 0;
         this.kills = 0;
         this.speed = 0;
@@ -63,7 +129,7 @@ class Player {
 
         this.drawPicture(context, layerOptions);
 
-        this.nameShape.x = layerOptions.x;
+        this.nameShape.x = layerOptions.x + realDimension.width / 2;
         this.nameShape.y = layerOptions.y - 20;
         this.nameShape.draw(context, { x: 0, y: 0 });
     }
@@ -125,16 +191,20 @@ class Player {
     }
 
     /**
-     * Calculates the scale of the player's ship based on a standard size and the player's kills and deaths. It adjusts the real width and height of the ship accordingly, as well as the translation needed to keep the ship centered. Finally, it calls render to update the picture with the new scale.
+     * Calculates the scale of the player's ship from a standard size and, when the admin has enabled it, the player's kills and deaths. It adjusts the real width and height of the ship accordingly, as well as the translation needed to keep the ship centered. Finally, it calls render to update the picture with the new scale.
      * @param {number} sizeStandard 
      */
-    calculateScale(sizeStandard = 100) {
+    calculateScale(sizeStandard = shipSizeStandard) {
         let scaleDec = 1;
         if (sizeStandard) {
             const baseSize = Math.max(this.width, this.height) || 1;
             const minSize = 10;
-            const newSize = sizeStandard + (this.kills - this.deaths) * 10;
-            const clampedSize = Math.max(minSize, newSize);
+            // Only the score term is optional. sizeStandard itself is what
+            // normalises every hull to a common size, so dropping it too
+            // would make each ship render at whatever its artwork happens to
+            // measure - which is a different change entirely.
+            const scoreBonus = killScalingEnabled ? (this.kills - this.deaths) * 10 : 0;
+            const clampedSize = Math.max(minSize, sizeStandard + scoreBonus);
             scaleDec = clampedSize / baseSize;
         }
 
@@ -197,6 +267,14 @@ class Player {
             hide: this.hide,
             isDead: this.isDead,
             scale: this.scale,
+            // The ship's raw size. shipId alone is not enough for anyone
+            // else to know it: /game/getShips only lists the *public*
+            // ships, so a player flying one of their own painting projects
+            // is a ship nobody else can measure. ships-npc needs the real
+            // numbers to aim at the middle of this ship rather than at a
+            // guess (see ships-npc/CHANGES.md 1.0.0).
+            width: this.width,
+            height: this.height,
             socketId: this.socketId,
             xTranslation: this.xTranslation,
             yTranslation: this.yTranslation
@@ -413,8 +491,15 @@ class ShipsManager {
         return this.ships;
     }
 
+    // A client only knows the generic ships plus its *own* custom ones, so
+    // any other player flying a custom ship has a shipId that is missing
+    // here. Returning undefined made `new Player(...)` throw on
+    // `ship.layers`, which aborted whatever was running - including the
+    // initial updatePlayers() pass, leaving the game with no local player
+    // at all. Fall back to a generic hull so an unknown ship is merely
+    // drawn wrong instead of breaking the session.
     getShipById(shipId) {
-        return this.shipsById[shipId];
+        return this.shipsById[shipId] || this.getGenericShips()[0] || this.ships[0];
     }
 
     getGenericShips() {

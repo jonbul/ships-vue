@@ -50,7 +50,13 @@ class GameStatus {
             props.forEach(prop => {
                 const td = document.createElement('td');
                 td.style.textAlign = 'center';
-                td.innerHTML = player[prop];
+                // textContent, never innerHTML: `name` is fully player
+                // controlled (registration applies no character restriction
+                // and guests type their own via prompt()), and this page is
+                // embedded in the admin panel as an iframe on the API origin.
+                // innerHTML here let any player run script in the admin's
+                // session, once a second, for as long as they were online.
+                td.textContent = player[prop];
                 tr.appendChild(td);
             });
             this.playersDetails.appendChild(tr);
@@ -128,15 +134,53 @@ class GameStatus {
             }
         }
 
+        this.prunePlayerSprites();
         for (const sessionId in this.players) {
             const player = this.players[sessionId];
             if (!player.isDead) {
                 const x = (player.x - absoluteValues.x1 * this.canvasWidth) / biggerRelation;
                 const y = (player.y - absoluteValues.y1 * this.canvasHeight) / biggerRelation;
-                const pl = new Player(this.ships[player.shipId], player.name, player.shipId, x, y);
+                const pl = this.getPlayerSprite(player);
+                if (!pl) continue;
+                pl.x = x;
+                pl.y = y;
                 pl.rotate = player.rotate;
                 pl.draw(this.context);
             }
+        }
+    }
+
+    // Player instances are cached per socketId: the constructor calls
+    // calculateScale() -> render(), which allocates and sizes an offscreen
+    // canvas. Rebuilding one per player per second (this runs on a 1s
+    // interval) churned native memory outside the JS heap.
+    getPlayerSprite(player) {
+        this.playerSprites ||= {};
+        const ship = this.getShipById(player.shipId);
+        if (!ship) return null;
+
+        const cached = this.playerSprites[player.socketId];
+        if (cached && cached.shipId === player.shipId) return cached.sprite;
+
+        const sprite = new Player(ship, player.name, player.shipId, 0, 0);
+        this.playerSprites[player.socketId] = { shipId: player.shipId, sprite };
+        return sprite;
+    }
+
+    // /game/getShips only returns *public* ships, so a player flying a custom
+    // one has a shipId that is absent here. Passing undefined to Player throws
+    // on ship.layers, and since drawMap is an un-awaited async call the whole
+    // map silently stops being drawn. Mirrors ShipsManager.getShipById.
+    getShipById(shipId) {
+        if (this.ships?.[shipId]) return this.ships[shipId];
+        const all = Object.values(this.ships || {});
+        return all.find(s => !s.userId) || all[0] || null;
+    }
+
+    prunePlayerSprites() {
+        if (!this.playerSprites) return;
+        for (const socketId in this.playerSprites) {
+            if (!this.players?.[socketId]) delete this.playerSprites[socketId];
         }
     }
 
